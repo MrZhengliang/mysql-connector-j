@@ -166,8 +166,8 @@ com.mysql.jdbc.noCleanBetweenCompiles=yes
     </condition>
 
     <!-- The following properties are needed for finding JDK5 and JDK8 needed for compile and can be passed on the command line to ant via -D switches. -->
-    <property name="com.mysql.jdbc.jdk5" value="/usr/lib/jvm/jdk1.5" />
-    <property name="com.mysql.jdbc.jdk8" value="/usr/lib/jvm/jdk1.8" />
+    <property name="com.mysql.jdbc.jdk5" value="/home/yurii/jdk1.5.0_22" />
+    <property name="com.mysql.jdbc.jdk8" value="/usr/lib/jvm/jdk-8-oracle-x64" />
 
     <!-- The following property allows to point the location of third-party libraries we don't distribute. Default value points to src/lib so user could either
        put these jars there or pass different location via ant -D switch. -->
