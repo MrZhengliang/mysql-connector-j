@@ -11,5 +11,5 @@ My recent snapshot is /mysql-connector-java-5.1.38-SNAPSHOT-bin.jar
 
 my sharing:
 
-jira issue : https://jira.atlassian.com/browse/JRA-40198
-jira answer: https://answers.atlassian.com/questions/32023132/answers/33131693
+* jira issue : https://jira.atlassian.com/browse/JRA-40198
+* jira answer: https://answers.atlassian.com/questions/32023132/answers/33131693
