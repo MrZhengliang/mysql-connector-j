@@ -395,6 +395,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
             throws SQLException {
             
             // hard fix for MySQL 5.7 deprecation of 'storage_engine' variable
+            info.setProperty("sessionVariables", info.getProperty("sessionVariables").replace("default_storage_engine", "storage_engine"));
             info.setProperty("sessionVariables", info.getProperty("sessionVariables").replace("storage_engine", "default_storage_engine"));
             
         if (!Util.isJdbc4()) {
