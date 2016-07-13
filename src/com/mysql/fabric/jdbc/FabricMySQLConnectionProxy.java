@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -84,7 +84,7 @@ import com.mysql.jdbc.profiler.ProfilerEventHandler;
  */
 public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl implements FabricMySQLConnection, FabricMySQLConnectionProperties {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 5845485979107347258L;
 
     private Log log;
 
@@ -190,15 +190,14 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
                     getExceptionInterceptor(), this);
         }
 
+        // initialize log before any further calls that might actually use it
+        this.log = LogFactory.getLogger(getLogger(), "FabricMySQLConnectionProxy", null);
+
         setShardTable(this.fabricShardTable);
         setShardKey(this.fabricShardKey);
 
         setServerGroupName(this.fabricServerGroup);
-
-        this.log = LogFactory.getLogger(getLogger(), "FabricMySQLConnectionProxy", null);
     }
-
-    private boolean intercepting = false; // prevent recursion
 
     /**
      * Deal with an exception thrown on an underlying connection. We only consider connection exceptions (SQL State 08xxx). We internally handle a possible
@@ -208,19 +207,19 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
      * @param conn
      * @param group
      * @param hostname
-     * @param port
+     * @param portNumber
      * @throws FabricCommunicationException
      */
-    synchronized SQLException interceptException(SQLException sqlEx, Connection conn, String groupName, String hostname, String port)
+    synchronized SQLException interceptException(SQLException sqlEx, Connection conn, String groupName, String hostname, String portNumber)
             throws FabricCommunicationException {
         // we are only concerned with connection failures, skip anything else
         if (sqlEx.getSQLState() != null && !(sqlEx.getSQLState().startsWith("08")
-                        || com.mysql.jdbc.exceptions.MySQLNonTransientConnectionException.class.isAssignableFrom(sqlEx.getClass()))) {
+                || com.mysql.jdbc.exceptions.MySQLNonTransientConnectionException.class.isAssignableFrom(sqlEx.getClass()))) {
             return null;
         }
 
         // find the Server corresponding to this connection
-        Server currentServer = this.serverGroup.getServer(hostname + ":" + port);
+        Server currentServer = this.serverGroup.getServer(hostname + ":" + portNumber);
 
         // we have already failed over or dealt with this connection, let the exception propagate
         if (currentServer == null) {
@@ -508,8 +507,8 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
             currentMasterString = replConnGroup.getMasterHosts().iterator().next();
         }
         // check if master has changed
-        if (currentMasterString != null &&
-                (this.serverGroup.getMaster() == null || !currentMasterString.equals(this.serverGroup.getMaster().getHostPortString()))) {
+        if (currentMasterString != null
+                && (this.serverGroup.getMaster() == null || !currentMasterString.equals(this.serverGroup.getMaster().getHostPortString()))) {
             // old master is gone (there may be a new one) (closeGently=false)
             try {
                 replConnGroup.removeMasterHost(currentMasterString, false);
@@ -606,6 +605,7 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
         info.setProperty(NonRegisteringDriver.DBNAME_PROPERTY_KEY, getCatalog());
         info.setProperty("connectionAttributes", "fabricHaGroup:" + this.serverGroup.getName());
         info.setProperty("retriesAllDown", "1");
+        info.setProperty("allowMasterDownConnections", "true");
         info.setProperty("allowSlaveDownConnections", "true");
         info.setProperty("readFromMasterWhenNoSlaves", "true");
         this.currentConnection = ReplicationConnectionProxy.createProxyInstance(masterHost, info, slaveHosts, info);
@@ -1022,10 +1022,12 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
         throw SQLError.createSQLFeatureNotSupportedException();
     }
 
+    @Deprecated
     public void clearHasTriedMaster() {
         // no-op
     }
 
+    @Deprecated
     public boolean hasTriedMaster() {
         return false;
     }
@@ -2742,6 +2744,7 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
     public void setFailedOver(boolean flag) {
     }
 
+    @Deprecated
     public void setPreferSlaveDuringFailover(boolean flag) {
     }
 
@@ -2855,6 +2858,10 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
     }
 
     public String getHost() {
+        return null;
+    }
+
+    public String getHostPortPair() {
         return null;
     }
 
@@ -3024,6 +3031,11 @@ public class FabricMySQLConnectionProxy extends ConnectionPropertiesImpl impleme
         return null;
     }
 
+    /**
+     * 
+     * @param name
+     * @return
+     */
     public String getClientInfo(String name) {
         return null;
     }

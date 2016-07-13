@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -57,6 +57,7 @@ import java.util.Stack;
 import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TreeMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 
 import com.mysql.jdbc.PreparedStatement.ParseInfo;
@@ -88,6 +89,10 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
 
     public String getHost() {
         return this.host;
+    }
+
+    public String getHostPortPair() {
+        return this.hostPortPair != null ? this.hostPortPair : this.host + ":" + this.port;
     }
 
     private MySQLConnection proxy = null;
@@ -124,8 +129,8 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
         return (this.realProxy != null) ? this.realProxy : getProxy();
     }
 
-    class ExceptionInterceptorChain implements ExceptionInterceptor {
-        List<Extension> interceptors;
+    public class ExceptionInterceptorChain implements ExceptionInterceptor {
+        private List<Extension> interceptors;
 
         ExceptionInterceptorChain(String interceptorClasses) throws SQLException {
             this.interceptors = Util.loadExtensions(ConnectionImpl.this, ConnectionImpl.this.props, interceptorClasses, "Connection.BadExceptionInterceptor",
@@ -168,6 +173,11 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
                 }
             }
         }
+
+        public List<Extension> getInterceptors() {
+            return this.interceptors;
+        }
+
     }
 
     /**
@@ -570,8 +580,11 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
 
     private int[] oldHistCounts = null;
 
-    /** A map of currently open statements */
-    private Map<Statement, Statement> openStatements;
+    /**
+     * An array of currently open statements.
+     * Copy-on-write used here to avoid ConcurrentModificationException when statements unregister themselves while we iterate over the list.
+     */
+    private final CopyOnWriteArrayList<Statement> openStatements = new CopyOnWriteArrayList<Statement>();
 
     private LRUCache parsedCallableStatementCache;
 
@@ -734,8 +747,6 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
         // We will reset this to the configured logger during properties initialization.
         //
         this.log = LogFactory.getLogger(getLogger(), LOGGER_INSTANCE_NAME, getExceptionInterceptor());
-
-        this.openStatements = new HashMap<Statement, Statement>();
 
         if (NonRegisteringDriver.isHostPropertiesList(hostToConnectTo)) {
             Properties hostSpecificProps = NonRegisteringDriver.expandHostKeyValues(hostToConnectTo);
@@ -1398,6 +1409,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
         this.isClosed = true;
     }
 
+    @Deprecated
     public void clearHasTriedMaster() {
         this.hasTriedMasterFlag = false;
     }
@@ -1458,7 +1470,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
 
                 this.cachedPreparedStatementParams.put(nativeSql, pStmt.getParseInfo());
             } else {
-                pStmt = new com.mysql.jdbc.PreparedStatement(getMultiHostSafeProxy(), nativeSql, this.database, pStmtInfo);
+                pStmt = com.mysql.jdbc.PreparedStatement.getInstance(getMultiHostSafeProxy(), nativeSql, this.database, pStmtInfo);
             }
         } else {
             pStmt = com.mysql.jdbc.PreparedStatement.getInstance(getMultiHostSafeProxy(), nativeSql, this.database);
@@ -1533,30 +1545,16 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
     private void closeAllOpenStatements() throws SQLException {
         SQLException postponedException = null;
 
-        if (this.openStatements != null) {
-            List<Statement> currentlyOpenStatements = new ArrayList<Statement>(); // we need this to
-            // avoid ConcurrentModificationEx
-
-            for (Iterator<Statement> iter = this.openStatements.keySet().iterator(); iter.hasNext();) {
-                currentlyOpenStatements.add(iter.next());
+        for (Statement stmt : this.openStatements) {
+            try {
+                ((StatementImpl) stmt).realClose(false, true);
+            } catch (SQLException sqlEx) {
+                postponedException = sqlEx; // throw it later, cleanup all statements first
             }
+        }
 
-            int numStmts = currentlyOpenStatements.size();
-
-            for (int i = 0; i < numStmts; i++) {
-                StatementImpl stmt = (StatementImpl) currentlyOpenStatements.get(i);
-
-                try {
-                    stmt.realClose(false, true);
-                } catch (SQLException sqlEx) {
-                    postponedException = sqlEx; // throw it later, cleanup all
-                    // statements first
-                }
-            }
-
-            if (postponedException != null) {
-                throw postponedException;
-            }
+        if (postponedException != null) {
+            throw postponedException;
         }
     }
 
@@ -2184,7 +2182,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
             //
             // Retrieve any 'lost' prepared statements if re-connecting
             //
-            Iterator<Statement> statementIter = this.openStatements.values().iterator();
+            Iterator<Statement> statementIter = this.openStatements.iterator();
 
             //
             // We build a list of these outside the map of open statements, because in the process of re-preparing, we might end up having to close a prepared
@@ -2653,14 +2651,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
     }
 
     public int getActiveStatementCount() {
-        // Might not have one of these if not tracking open resources
-        if (this.openStatements != null) {
-            synchronized (this.openStatements) {
-                return this.openStatements.size();
-            }
-        }
-
-        return 0;
+        return this.openStatements.size();
     }
 
     /**
@@ -2896,6 +2887,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
     public int getMaxBytesPerChar(Integer charsetIndex, String javaCharsetName) throws SQLException {
 
         String charset = null;
+        int res = 1;
 
         try {
             // if we can get it by charsetIndex just doing it
@@ -2927,7 +2919,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
             }
 
             if (mblen != null) {
-                return mblen.intValue();
+                res = mblen.intValue();
             }
         } catch (SQLException ex) {
             throw ex;
@@ -2937,7 +2929,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
             throw sqlEx;
         }
 
-        return 1; // we don't know
+        return res;
     }
 
     /**
@@ -3172,6 +3164,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
         return this.props;
     }
 
+    @Deprecated
     public boolean hasTriedMaster() {
         return this.hasTriedMasterFlag;
     }
@@ -3353,30 +3346,13 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
             this.io.checkForCharsetMismatch();
 
             if (this.serverVariables.containsKey("sql_mode")) {
-                int sqlMode = 0;
-
                 String sqlModeAsString = this.serverVariables.get("sql_mode");
-                try {
-                    sqlMode = Integer.parseInt(sqlModeAsString);
-                } catch (NumberFormatException nfe) {
-                    // newer versions of the server has this as a string-y list...
-                    sqlMode = 0;
-
-                    if (sqlModeAsString != null) {
-                        if (sqlModeAsString.indexOf("ANSI_QUOTES") != -1) {
-                            sqlMode |= 4;
-                        }
-
-                        if (sqlModeAsString.indexOf("NO_BACKSLASH_ESCAPES") != -1) {
-                            this.noBackslashEscapes = true;
-                        }
-                    }
-                }
-
-                if ((sqlMode & 4) > 0) {
-                    this.useAnsiQuotes = true;
-                } else {
-                    this.useAnsiQuotes = false;
+                if (StringUtils.isStrictlyNumeric(sqlModeAsString)) {
+                    // Old MySQL servers used to have sql_mode as a numeric value.
+                    this.useAnsiQuotes = (Integer.parseInt(sqlModeAsString) & 4) > 0;
+                } else if (sqlModeAsString != null) {
+                    this.useAnsiQuotes = sqlModeAsString.indexOf("ANSI_QUOTES") != -1;
+                    this.noBackslashEscapes = sqlModeAsString.indexOf("NO_BACKSLASH_ESCAPES") != -1;
                 }
             }
         }
@@ -3571,9 +3547,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
      *         the list.
      */
     public boolean isMasterConnection() {
-        synchronized (getConnectionMutex()) {
-            return false; // handled higher up
-        }
+        return false; // handled higher up
     }
 
     /**
@@ -3715,8 +3689,6 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
         return this.isServerTzUTC;
     }
 
-    private boolean usingCachedConfig = false;
-
     private void createConfigCacheIfNeeded() throws SQLException {
         synchronized (getConnectionMutex()) {
             if (this.serverConfigCache != null) {
@@ -3801,7 +3773,6 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
 
                 if (cachedServerVersion != null && this.io.getServerVersion() != null && cachedServerVersion.equals(this.io.getServerVersion())) {
                     this.serverVariables = cachedVariableMap;
-                    this.usingCachedConfig = true;
 
                     return;
                 }
@@ -3891,7 +3862,6 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
 
                 this.serverConfigCache.put(getURL(), this.serverVariables);
 
-                this.usingCachedConfig = true;
             }
         } catch (SQLException e) {
             throw e;
@@ -4318,7 +4288,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
                 this.exceptionInterceptor.destroy();
             }
         } finally {
-            this.openStatements = null;
+            this.openStatements.clear();
             if (this.io != null) {
                 this.io.releaseResources();
                 this.io = null;
@@ -4390,9 +4360,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
      *            the Statement instance to remove
      */
     public void registerStatement(Statement stmt) {
-        synchronized (this.openStatements) {
-            this.openStatements.put(stmt, stmt);
-        }
+        this.openStatements.addIfAbsent(stmt);
     }
 
     /**
@@ -4969,9 +4937,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
      *            The failedOver to set.
      */
     public void setFailedOver(boolean flag) {
-        synchronized (getConnectionMutex()) {
-            // handled higher up
-        }
+        // handled higher up
     }
 
     /**
@@ -4990,6 +4956,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
      * @param preferSlaveDuringFailover
      *            The preferSlaveDuringFailover to set.
      */
+    @Deprecated
     public void setPreferSlaveDuringFailover(boolean flag) {
         // no-op, handled further up in the wrapper
     }
@@ -5254,11 +5221,7 @@ public class ConnectionImpl extends ConnectionPropertiesImpl implements MySQLCon
      *            the Statement instance to remove
      */
     public void unregisterStatement(Statement stmt) {
-        if (this.openStatements != null) {
-            synchronized (this.openStatements) {
-                this.openStatements.remove(stmt);
-            }
-        }
+        this.openStatements.remove(stmt);
     }
 
     public boolean useAnsiQuotedIdentifiers() {

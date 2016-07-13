@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -59,12 +59,19 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TimeZone;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.mysql.jdbc.CachedResultSetMetaData;
 import com.mysql.jdbc.CharsetMapping;
@@ -1208,7 +1215,7 @@ public class StatementRegressionTest extends BaseTestCase {
         try {
             TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"));
 
-            createTable("testBug3620", "(field1 TIMESTAMP)");
+            createTable("testBug3620", "(field1 TIMESTAMP) ENGINE=InnoDB");
 
             Properties props = new Properties();
             props.put("cacheDefaultTimezone", "false");
@@ -1882,7 +1889,7 @@ public class StatementRegressionTest extends BaseTestCase {
             this.pstmt.setFetchSize(Integer.MIN_VALUE);
             this.rs = this.pstmt.executeQuery();
             try {
-                this.conn.createStatement().executeQuery("SELECT 2");
+                this.rs = this.conn.createStatement().executeQuery("SELECT 2");
                 fail("Should have caught a streaming exception here");
             } catch (SQLException sqlEx) {
                 assertTrue(sqlEx.getMessage() != null && sqlEx.getMessage().indexOf("Streaming") != -1);
@@ -2148,7 +2155,7 @@ public class StatementRegressionTest extends BaseTestCase {
             }
 
             this.stmt.setMaxRows(250);
-            this.stmt.executeQuery("SELECT limitField FROM testMaxRowsAndLimit");
+            this.rs = this.stmt.executeQuery("SELECT limitField FROM testMaxRowsAndLimit");
         } finally {
             this.stmt.setMaxRows(0);
 
@@ -2590,7 +2597,7 @@ public class StatementRegressionTest extends BaseTestCase {
         try {
             maxRowsStmt = this.conn.createStatement();
             maxRowsStmt.setMaxRows(1);
-            maxRowsStmt.executeQuery("SELECT 1");
+            this.rs = maxRowsStmt.executeQuery("SELECT 1");
         } finally {
             if (maxRowsStmt != null) {
                 maxRowsStmt.close();
@@ -2940,11 +2947,11 @@ public class StatementRegressionTest extends BaseTestCase {
             try {
                 poolingConn = getConnectionWithProps(props);
                 pstmt1 = poolingConn.prepareStatement("SELECT field1 FROM testBug20687");
-                pstmt1.executeQuery();
+                this.rs = pstmt1.executeQuery();
                 pstmt1.close();
 
                 pstmt2 = poolingConn.prepareStatement("SELECT field1 FROM testBug20687");
-                pstmt2.executeQuery();
+                this.rs = pstmt2.executeQuery();
                 assertTrue(pstmt1 == pstmt2);
                 pstmt2.close();
             } finally {
@@ -3073,6 +3080,7 @@ public class StatementRegressionTest extends BaseTestCase {
      *             if the test fails.
      */
 
+    @SuppressWarnings("deprecation")
     public void testBug21438() throws Exception {
         createTable("testBug21438", "(t_id int(10), test_date timestamp NOT NULL,primary key t_pk (t_id));");
 
@@ -3559,14 +3567,14 @@ public class StatementRegressionTest extends BaseTestCase {
                 assertNull(commentStmt.getMetaData());
 
                 try {
-                    commentStmt.executeQuery();
+                    this.rs = commentStmt.executeQuery();
                     fail("Should not be able to call executeQuery() on a SELECT statement!");
                 } catch (SQLException sqlEx) {
                     // expected
                 }
 
                 try {
-                    this.stmt.executeQuery(updatesToTest[i]);
+                    this.rs = this.stmt.executeQuery(updatesToTest[i]);
                     fail("Should not be able to call executeQuery() on a SELECT statement!");
                 } catch (SQLException sqlEx) {
                     // expected
@@ -4095,10 +4103,12 @@ public class StatementRegressionTest extends BaseTestCase {
                 return null;
             }
 
+            @Deprecated
             public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
                 return null;
             }
 
+            @Deprecated
             public BigDecimal getBigDecimal(String columnName, int scale) throws SQLException {
                 return null;
             }
@@ -4319,10 +4329,12 @@ public class StatementRegressionTest extends BaseTestCase {
                 return null;
             }
 
+            @Deprecated
             public InputStream getUnicodeStream(int columnIndex) throws SQLException {
                 return null;
             }
 
+            @Deprecated
             public InputStream getUnicodeStream(String columnName) throws SQLException {
                 return null;
             }
@@ -4747,14 +4759,14 @@ public class StatementRegressionTest extends BaseTestCase {
             this.stmt.executeUpdate("INSERT INTO t1 VALUES (0, 0)");
 
             this.conn.setAutoCommit(false);
-            this.conn.createStatement().executeQuery("SELECT * FROM t1 WHERE id=0 FOR UPDATE");
+            this.rs = this.conn.createStatement().executeQuery("SELECT * FROM t1 WHERE id=0 FOR UPDATE");
 
             final Connection deadlockConn = getConnectionWithProps("includeInnodbStatusInDeadlockExceptions=true");
             deadlockConn.setAutoCommit(false);
 
             final Statement deadlockStmt = deadlockConn.createStatement();
             deadlockStmt.executeUpdate("INSERT INTO t2 VALUES (1, 0)");
-            deadlockStmt.executeQuery("SELECT * FROM t2 WHERE id=0 FOR UPDATE");
+            this.rs = deadlockStmt.executeQuery("SELECT * FROM t2 WHERE id=0 FOR UPDATE");
 
             new Thread() {
                 @Override
@@ -4903,7 +4915,7 @@ public class StatementRegressionTest extends BaseTestCase {
     }
 
     public void testBug34185() throws Exception {
-        this.stmt.executeQuery("SELECT 1");
+        this.rs = this.stmt.executeQuery("SELECT 1");
 
         try {
             this.stmt.getGeneratedKeys();
@@ -5090,7 +5102,7 @@ public class StatementRegressionTest extends BaseTestCase {
                 + "N1 DECIMAL(28,6), N2 DECIMAL(28,6), N3 DECIMAL(28,6), UNIQUE KEY UNIQUE_KEY_TEST_DUPLICATE (ID) )");
 
         int numTests = 5000;
-        Connection rewriteConn = getConnectionWithProps("rewriteBatchedStatements=true,dumpQueriesOnException=true");
+        Connection rewriteConn = getConnectionWithProps("useSSL=false,rewriteBatchedStatements=true,dumpQueriesOnException=true");
 
         assertEquals("0", getSingleIndexedValueWithQuery(rewriteConn, 2, "SHOW SESSION STATUS LIKE 'Com_insert'").toString());
         long batchedTime = timeBatch(rewriteConn, numTests);
@@ -5103,7 +5115,7 @@ public class StatementRegressionTest extends BaseTestCase {
         assertEquals(String.valueOf(numTests), getSingleIndexedValueWithQuery(this.conn, 2, "SHOW SESSION STATUS LIKE 'Com_insert'").toString());
         assertTrue(batchedTime < unbatchedTime);
 
-        rewriteConn = getConnectionWithProps("rewriteBatchedStatements=true,useCursorFetch=true,defaultFetchSize=10000");
+        rewriteConn = getConnectionWithProps("useSSL=false,rewriteBatchedStatements=true,useCursorFetch=true,defaultFetchSize=10000");
         timeBatch(rewriteConn, numTests);
     }
 
@@ -5190,7 +5202,7 @@ public class StatementRegressionTest extends BaseTestCase {
             pstmt2 = conn2.prepareStatement("select ?");
             pstmt2.setString(1, "\u00A5'");
             // this will throw an exception with a syntax error if it fails
-            pstmt2.executeQuery();
+            this.rs = pstmt2.executeQuery();
         } finally {
             try {
                 if (pstmt2 != null) {
@@ -5509,7 +5521,7 @@ public class StatementRegressionTest extends BaseTestCase {
         ResultSet testRs = testConn.createStatement().executeQuery("SHOW SESSION STATUS LIKE 'Com_select'");
         testRs.next();
         int s = testRs.getInt(2);
-        testConn.createStatement().executeQuery("SELECT 1");
+        this.rs = testConn.createStatement().executeQuery("SELECT 1");
         testRs = testConn.createStatement().executeQuery("SHOW SESSION STATUS LIKE 'Com_select'");
         testRs.next();
         assertEquals(s + 1, testRs.getInt(2));
@@ -5535,7 +5547,7 @@ public class StatementRegressionTest extends BaseTestCase {
         Connection scanningConn = getConnectionWithProps("statementInterceptors=" + ScanDetectingInterceptor.class.getName());
 
         try {
-            scanningConn.createStatement().executeQuery("SELECT field1 FROM testReversalOfScanFlags");
+            this.rs = scanningConn.createStatement().executeQuery("SELECT field1 FROM testReversalOfScanFlags");
             assertTrue(ScanDetectingInterceptor.hasSeenScan);
             assertFalse(ScanDetectingInterceptor.hasSeenBadIndex);
         } finally {
@@ -5551,7 +5563,7 @@ public class StatementRegressionTest extends BaseTestCase {
         @Override
         public ResultSetInternalMethods postProcess(String sql, com.mysql.jdbc.Statement interceptedStatement, ResultSetInternalMethods originalResultSet,
                 com.mysql.jdbc.Connection connection, int warningCount, boolean noIndexUsed, boolean noGoodIndexUsed, SQLException statementException)
-                        throws SQLException {
+                throws SQLException {
             if (noIndexUsed) {
                 hasSeenScan = true;
             }
@@ -5631,7 +5643,7 @@ public class StatementRegressionTest extends BaseTestCase {
         this.stmt.executeUpdate("INSERT INTO testBug61501 VALUES (1)");
         String sql = "SELECT id FROM testBug61501 where id=1";
         this.pstmt = this.conn.prepareStatement(sql);
-        this.pstmt.executeQuery();
+        this.rs = this.pstmt.executeQuery();
         this.pstmt.cancel();
         this.pstmt.close();
 
@@ -5639,7 +5651,7 @@ public class StatementRegressionTest extends BaseTestCase {
         this.rs = this.pstmt.executeQuery();
 
         this.stmt.cancel();
-        this.stmt.executeQuery(sql);
+        this.rs = this.stmt.executeQuery(sql);
         this.stmt.cancel();
         this.stmt.execute(sql);
         this.pstmt = ((com.mysql.jdbc.Connection) this.conn).serverPrepareStatement(sql);
@@ -5904,14 +5916,14 @@ public class StatementRegressionTest extends BaseTestCase {
     public void testBug35653() throws Exception {
         createTable("testBug35653", "(f1 int)");
         try {
-            this.stmt.executeQuery("TRUNCATE testBug35653");
+            this.rs = this.stmt.executeQuery("TRUNCATE testBug35653");
             fail("executeQuery() shouldn't allow TRUNCATE");
         } catch (SQLException e) {
             assertTrue(SQLError.SQL_STATE_ILLEGAL_ARGUMENT == e.getSQLState());
         }
 
         try {
-            this.stmt.executeQuery("RENAME TABLE testBug35653 TO testBug35653_new");
+            this.rs = this.stmt.executeQuery("RENAME TABLE testBug35653 TO testBug35653_new");
             fail("executeQuery() shouldn't allow RENAME");
         } catch (SQLException e) {
             assertTrue(SQLError.SQL_STATE_ILLEGAL_ARGUMENT == e.getSQLState());
@@ -5929,7 +5941,7 @@ public class StatementRegressionTest extends BaseTestCase {
 
         try {
             this.stmt.setQueryTimeout(5);
-            this.stmt.executeQuery("select sleep(5)");
+            this.rs = this.stmt.executeQuery("select sleep(5)");
         } catch (NullPointerException e) {
             e.printStackTrace();
             fail();
@@ -5995,7 +6007,7 @@ public class StatementRegressionTest extends BaseTestCase {
                 Statement st = this.testConn.createStatement();
                 // execute several fast queries to unlock slow query analysis and lower query execution time mean
                 for (int i = 0; i < 25; i++) {
-                    st.executeQuery("SELECT 1");
+                    st.execute("SELECT 1");
                 }
                 return this.testConn;
             }
@@ -6589,7 +6601,7 @@ public class StatementRegressionTest extends BaseTestCase {
         if (maxRows > 0) {
             testStmt.setMaxRows(maxRows);
         }
-        testStmt.executeQuery("SELECT 1"); // force limit to be applied into current session
+        testStmt.execute("SELECT 1"); // force limit to be applied into current session
 
         testBug71396StatementCheck(testStmt, String.format("SELECT * FROM testBug71396 LIMIT %d", limitClause), expRowCount);
         testBug71396PrepStatementCheck(testConn, String.format("SELECT * FROM testBug71396 LIMIT %d", limitClause), expRowCount, maxRows);
@@ -6646,18 +6658,18 @@ public class StatementRegressionTest extends BaseTestCase {
             String query = "Select 'a' from dual";
 
             ps1_1 = con.prepareStatement(query);
-            ps1_1.executeQuery();
+            ps1_1.execute();
             ps1_1.close();
 
             ps1_2 = con.prepareStatement(query);
             assertSame("SSPS should be taken from cache but is not the same.", ps1_1, ps1_2);
-            ps1_2.executeQuery();
+            ps1_2.execute();
             ps1_2.close();
             ps1_2.close();
 
             ps1_1 = con.prepareStatement(query);
             assertNotSame("SSPS should not be taken from cache but is the same.", ps1_2, ps1_1);
-            ps1_1.executeQuery();
+            ps1_1.execute();
             ps1_1.close();
             ps1_1.close();
 
@@ -6668,13 +6680,13 @@ public class StatementRegressionTest extends BaseTestCase {
             PreparedStatement ps3_2;
 
             ps1_1 = con.prepareStatement("Select 'b' from dual");
-            ps1_1.executeQuery();
+            ps1_1.execute();
             ps1_1.close();
             ps2_1 = con.prepareStatement("Select 'c' from dual");
-            ps2_1.executeQuery();
+            ps2_1.execute();
             ps2_1.close();
             ps3_1 = con.prepareStatement("Select 'd' from dual");
-            ps3_1.executeQuery();
+            ps3_1.execute();
             ps3_1.close();
 
             ps1_2 = con.prepareStatement("Select 'b' from dual");
@@ -7471,7 +7483,7 @@ public class StatementRegressionTest extends BaseTestCase {
                 query = query.substring(query.indexOf(':') + 2);
             }
 
-            if ((query.startsWith("INSERT") || query.startsWith("UPDATE") || query.startsWith("CALL")) && !query.contains("no_ts_trunk")) {
+            if (query != null && ((query.startsWith("INSERT") || query.startsWith("UPDATE") || query.startsWith("CALL")) && !query.contains("no_ts_trunk"))) {
                 if (this.sendFracSecs ^ query.contains(".999")) {
                     fail("Wrong TIMESTAMP trunctation in query [" + query + "]");
                 }
@@ -7577,7 +7589,7 @@ public class StatementRegressionTest extends BaseTestCase {
                 query = interceptedStatement.toString();
                 query = query.substring(query.indexOf(':') + 2);
             }
-            if (query.indexOf("testBug77681") != -1) {
+            if (query != null && query.indexOf("testBug77681") != -1) {
                 System.out.println(this.execCounter + " --> " + query);
                 if (this.execCounter > this.expected.length) {
                     fail("Failed to rewrite statements");
@@ -7608,7 +7620,7 @@ public class StatementRegressionTest extends BaseTestCase {
                     rewriteBatchedStatements ? "rwBatchedStmts" : "-");
 
             Connection highLevelConn = getLoadBalancedConnection(props);
-            assertTrue(testCase, highLevelConn.getClass().getName().startsWith("com.sun.proxy"));
+            assertTrue(testCase, highLevelConn.getClass().getName().startsWith("com.sun.proxy") || highLevelConn.getClass().getName().startsWith("$Proxy"));
 
             Connection lowLevelConn = getMasterSlaveReplicationConnection(props);
             // This simulates the behavior from Fabric connections that are causing the problem.
@@ -7660,7 +7672,7 @@ public class StatementRegressionTest extends BaseTestCase {
         createProcedure("testBug78961", "(IN c1 FLOAT, IN c2 FLOAT, OUT h FLOAT, INOUT t FLOAT) BEGIN SET h = SQRT(c1 * c1 + c2 * c2); SET t = t + h; END;");
 
         Connection highLevelConn = getLoadBalancedConnection(null);
-        assertTrue(highLevelConn.getClass().getName().startsWith("com.sun.proxy"));
+        assertTrue(highLevelConn.getClass().getName().startsWith("com.sun.proxy") || highLevelConn.getClass().getName().startsWith("$Proxy"));
 
         Connection lowLevelConn = getMasterSlaveReplicationConnection(null);
         // This simulates the behavior from Fabric connections that are causing the problem.
@@ -7676,5 +7688,177 @@ public class StatementRegressionTest extends BaseTestCase {
 
         assertEquals(5.0f, cstmt.getFloat(3));
         assertEquals(10.0f, cstmt.getFloat(4));
+    }
+
+    /**
+     * Test Bug#75956 - Inserting timestamps using a server PreparedStatement and useLegacyDatetimeCode=false
+     */
+    public void testBug75956() throws Exception {
+        createTable("bug75956", "(id int not null primary key auto_increment, dt1 datetime, dt2 datetime)");
+        Connection sspsConn = getConnectionWithProps("useCursorFetch=true,useLegacyDatetimeCode=false");
+        this.pstmt = sspsConn.prepareStatement("insert into bug75956 (dt1, dt2) values (?, ?)");
+        this.pstmt.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
+        this.pstmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+        this.pstmt.addBatch();
+        this.pstmt.clearParameters();
+        this.pstmt.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
+        this.pstmt.setTimestamp(2, null);
+        this.pstmt.addBatch();
+        this.pstmt.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
+        this.pstmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+        this.pstmt.addBatch();
+        this.pstmt.executeBatch();
+        this.pstmt.close();
+        this.rs = sspsConn.createStatement().executeQuery("select count(*) from bug75956 where dt2 is NULL");
+        this.rs.next();
+        assertEquals(1, this.rs.getInt(1));
+        sspsConn.close();
+    }
+
+    /**
+     * Tests fix for Bug#71131 - Poor error message in CallableStatement.java.
+     */
+    public void testBug71131() throws Exception {
+        createProcedure("testBug71131", "(IN r DOUBLE, OUT p DOUBLE) BEGIN SET p = 2 * r * PI(); END");
+        final CallableStatement cstmt = this.conn.prepareCall("{ CALL testBug71131 (?, 5) }");
+        assertThrows(SQLException.class, "Parameter p is not registered as an output parameter", new Callable<Void>() {
+            public Void call() throws Exception {
+                cstmt.execute();
+                return null;
+            }
+        });
+        cstmt.close();
+    }
+
+    /**
+     * Tests fix for Bug#23188498 - CLIENT HANG WHILE USING SERVERPREPSTMT WHEN PROFILESQL=TRUE AND USEIS=TRUE.
+     */
+    public void testBug23188498() throws Exception {
+        createTable("testBug23188498", "(id INT)");
+
+        MySQLConnection testConn = (com.mysql.jdbc.MySQLConnection) getConnectionWithProps("useServerPrepStmts=true,useInformationSchema=true,profileSQL=true");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        // Insert data:
+        this.pstmt = testConn.prepareStatement("INSERT INTO testBug23188498 (id) VALUES (?)");
+        this.pstmt.setInt(1, 10);
+        final PreparedStatement localPStmt1 = this.pstmt;
+        Future<Void> future1 = executor.submit(new Callable<Void>() {
+            public Void call() throws Exception {
+                localPStmt1.executeUpdate();
+                return null;
+            }
+        });
+        try {
+            future1.get(5, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // The connection hung, forcibly closing it releases resources.
+            this.stmt.execute("KILL CONNECTION " + testConn.getId());
+            fail("Connection hung after executeUpdate().");
+        }
+        this.pstmt.close();
+
+        // Fetch data:
+        this.pstmt = testConn.prepareStatement("SELECT * FROM testBug23188498 WHERE id > ?");
+        this.pstmt.setInt(1, 1);
+        final PreparedStatement localPStmt2 = this.pstmt;
+        Future<ResultSet> future2 = executor.submit(new Callable<ResultSet>() {
+            public ResultSet call() throws Exception {
+                return localPStmt2.executeQuery();
+            }
+        });
+        try {
+            this.rs = future2.get(5, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // The connection hung, forcibly closing it releases resources.
+            this.stmt.execute("KILL CONNECTION " + testConn.getId());
+            fail("Connection hung after executeQuery().");
+        }
+        assertTrue(this.rs.next());
+        assertEquals(10, this.rs.getInt(1));
+        assertFalse(this.rs.next());
+        this.pstmt.close();
+
+        executor.shutdownNow();
+        testConn.close();
+    }
+
+    /**
+     * Tests fix for Bug#23201930 - CLIENT HANG WHEN RSLT CUNCURRENCY=CONCUR_UPDATABLE AND RSLTSET TYPE=FORWARD_ONLY.
+     */
+    public void testBug23201930() throws Exception {
+        boolean useSSL = false;
+        boolean useSPS = false;
+        boolean useCursor = false;
+        boolean useCompr = false;
+
+        final char[] chars = new char[32 * 1024];
+        Arrays.fill(chars, 'x');
+        final String longData = String.valueOf(chars); // Using large data makes SSL connections hang sometimes.
+
+        do {
+            final String testCase = String.format("Case [SSL: %s, SPS: %s, Cursor: %s, Compr: %s]", useSSL ? "Y" : "N", useSPS ? "Y" : "N",
+                    useCursor ? "Y" : "N", useCompr ? "Y" : "N");
+
+            createTable("testBug23201930", "(id TINYINT AUTO_INCREMENT PRIMARY KEY, f1 INT DEFAULT 1, f2 INT DEFAULT 1, f3 INT DEFAULT 1, "
+                    + "f4 INT DEFAULT 1, f5 INT DEFAULT 1, fl LONGBLOB)");
+
+            final Properties props = new Properties();
+            props.setProperty("useSSL", Boolean.toString(useSSL));
+            if (useSSL) {
+                props.setProperty("requireSSL", "true");
+                props.setProperty("verifyServerCertificate", "false");
+            }
+            props.setProperty("useServerPrepStmts", Boolean.toString(useSPS));
+            props.setProperty("useCursorFetch", Boolean.toString(useCursor));
+            if (useCursor) {
+                props.setProperty("defaultFetchSize", "1");
+            }
+            props.setProperty("useCompression", Boolean.toString(useCompr));
+
+            final MySQLConnection testConn = (MySQLConnection) getConnectionWithProps(props);
+
+            final ExecutorService executor = Executors.newSingleThreadExecutor();
+            final Future<Void> future = executor.submit(new Callable<Void>() {
+                public Void call() throws Exception {
+                    final Statement testStmt = testConn.createStatement();
+                    testStmt.execute("INSERT INTO testBug23201930 (id) VALUES (100)");
+
+                    PreparedStatement testPstmt = testConn.prepareStatement("INSERT INTO testBug23201930 (id, fl) VALUES (?, ?)", ResultSet.TYPE_FORWARD_ONLY,
+                            ResultSet.CONCUR_UPDATABLE);
+                    testPstmt.setObject(1, 101, java.sql.Types.INTEGER);
+                    testPstmt.setObject(2, longData, java.sql.Types.VARCHAR);
+                    testPstmt.execute();
+                    testPstmt.setObject(1, 102, java.sql.Types.INTEGER);
+                    testPstmt.execute();
+                    testPstmt.close();
+
+                    testPstmt = testConn.prepareStatement("SELECT * FROM testBug23201930 WHERE id >= ? ORDER BY id ASC", ResultSet.TYPE_FORWARD_ONLY,
+                            ResultSet.CONCUR_UPDATABLE);
+                    testPstmt.setObject(1, 100, java.sql.Types.INTEGER);
+                    final ResultSet testRs = testPstmt.executeQuery();
+                    assertTrue(testRs.next());
+                    assertEquals(100, testRs.getInt(1));
+                    assertTrue(testRs.next());
+                    assertEquals(101, testRs.getInt(1));
+                    assertTrue(testRs.next());
+                    assertEquals(102, testRs.getInt(1));
+                    assertFalse(testRs.next());
+                    testPstmt.close();
+                    return null;
+                }
+            });
+
+            try {
+                future.get(10, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                // The connection hung, forcibly closing it releases resources.
+                this.stmt.executeQuery("KILL CONNECTION " + testConn.getId());
+                fail(testCase + ": Connection hung!");
+            }
+            executor.shutdownNow();
+
+            testConn.close();
+        } while ((useSSL = !useSSL) || (useSPS = !useSPS) || (useCursor = !useCursor) || (useCompr = !useCompr)); // Cycle through all possible combinations.
     }
 }

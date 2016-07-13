@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -64,32 +64,32 @@ public class StringUtils {
     /**
      * Search mode: skip between markers, skip block comments, skip line comments and skip white space.
      */
-    public static final Set<SearchMode> SEARCH_MODE__MRK_COM_WS = Collections.unmodifiableSet(EnumSet.of(SearchMode.SKIP_BETWEEN_MARKERS,
-            SearchMode.SKIP_BLOCK_COMMENTS, SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
+    public static final Set<SearchMode> SEARCH_MODE__MRK_COM_WS = Collections.unmodifiableSet(
+            EnumSet.of(SearchMode.SKIP_BETWEEN_MARKERS, SearchMode.SKIP_BLOCK_COMMENTS, SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
 
     /**
      * Search mode: allow backslash escape, skip block comments, skip line comments and skip white space.
      */
-    public static final Set<SearchMode> SEARCH_MODE__BSESC_COM_WS = Collections.unmodifiableSet(EnumSet.of(SearchMode.ALLOW_BACKSLASH_ESCAPE,
-            SearchMode.SKIP_BLOCK_COMMENTS, SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
+    public static final Set<SearchMode> SEARCH_MODE__BSESC_COM_WS = Collections.unmodifiableSet(
+            EnumSet.of(SearchMode.ALLOW_BACKSLASH_ESCAPE, SearchMode.SKIP_BLOCK_COMMENTS, SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
 
     /**
      * Search mode: allow backslash escape, skip between markers and skip white space.
      */
-    public static final Set<SearchMode> SEARCH_MODE__BSESC_MRK_WS = Collections.unmodifiableSet(EnumSet.of(SearchMode.ALLOW_BACKSLASH_ESCAPE,
-            SearchMode.SKIP_BETWEEN_MARKERS, SearchMode.SKIP_WHITE_SPACE));
+    public static final Set<SearchMode> SEARCH_MODE__BSESC_MRK_WS = Collections
+            .unmodifiableSet(EnumSet.of(SearchMode.ALLOW_BACKSLASH_ESCAPE, SearchMode.SKIP_BETWEEN_MARKERS, SearchMode.SKIP_WHITE_SPACE));
 
     /**
      * Search mode: skip block comments, skip line comments and skip white space.
      */
-    public static final Set<SearchMode> SEARCH_MODE__COM_WS = Collections.unmodifiableSet(EnumSet.of(SearchMode.SKIP_BLOCK_COMMENTS,
-            SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
+    public static final Set<SearchMode> SEARCH_MODE__COM_WS = Collections
+            .unmodifiableSet(EnumSet.of(SearchMode.SKIP_BLOCK_COMMENTS, SearchMode.SKIP_LINE_COMMENTS, SearchMode.SKIP_WHITE_SPACE));
 
     /**
      * Search mode: skip between markers and skip white space.
      */
-    public static final Set<SearchMode> SEARCH_MODE__MRK_WS = Collections.unmodifiableSet(EnumSet.of(SearchMode.SKIP_BETWEEN_MARKERS,
-            SearchMode.SKIP_WHITE_SPACE));
+    public static final Set<SearchMode> SEARCH_MODE__MRK_WS = Collections
+            .unmodifiableSet(EnumSet.of(SearchMode.SKIP_BETWEEN_MARKERS, SearchMode.SKIP_WHITE_SPACE));
 
     /**
      * Empty search mode.
@@ -125,7 +125,11 @@ public class StringUtils {
 
             if (cs == null) {
                 cs = Charset.forName(alias);
-                charsetsByAlias.putIfAbsent(alias, cs);
+                Charset oldCs = charsetsByAlias.putIfAbsent(alias, cs);
+                if (oldCs != null) {
+                    // if the previous value was recently set by another thread we return it instead of value we found here
+                    cs = oldCs;
+                }
             }
 
             return cs;
@@ -1195,7 +1199,8 @@ public class StringUtils {
                 if (c2 != '!') {
                     // comments block found, skip until end of block ("*/") (backslash escape doesn't work on comments)
                     i++; // move to next char ('*')
-                    while (++i <= stopPosition && (searchIn.charAt(i) != '*' || (i + 1 < searchInLength ? searchIn.charAt(i + 1) : Character.MIN_VALUE) != '/')) {
+                    while (++i <= stopPosition
+                            && (searchIn.charAt(i) != '*' || (i + 1 < searchInLength ? searchIn.charAt(i + 1) : Character.MIN_VALUE) != '/')) {
                         // continue
                     }
                     i++; // move to next char ('/')
@@ -1228,7 +1233,8 @@ public class StringUtils {
                 c2 = i + 2 < searchInLength ? searchIn.charAt(i + 2) : Character.MIN_VALUE;
 
             } else if (searchMode.contains(SearchMode.SKIP_LINE_COMMENTS)
-                    && ((c0 == '-' && c1 == '-' && (Character.isWhitespace(c2) || (dashDashCommentImmediateEnd = c2 == ';') || c2 == Character.MIN_VALUE)) || c0 == '#')) {
+                    && ((c0 == '-' && c1 == '-' && (Character.isWhitespace(c2) || (dashDashCommentImmediateEnd = c2 == ';') || c2 == Character.MIN_VALUE))
+                            || c0 == '#')) {
                 if (dashDashCommentImmediateEnd) {
                     // comments line found but closed immediately by query delimiter marker
                     i++; // move to next char ('-')
@@ -1799,9 +1805,7 @@ public class StringUtils {
         try {
             while ((currentChar = sourceReader.read()) != -1) {
 
-                if (false && currentChar == '\\') {
-                    escaped = !escaped;
-                } else if (markerTypeFound != -1 && currentChar == stringCloses.charAt(markerTypeFound) && !escaped) {
+                if (markerTypeFound != -1 && currentChar == stringCloses.charAt(markerTypeFound) && !escaped) {
                     contextMarker = Character.MIN_VALUE;
                     markerTypeFound = -1;
                 } else if ((ind = stringOpens.indexOf(currentChar)) != -1 && !escaped && contextMarker == Character.MIN_VALUE) {
@@ -2354,5 +2358,25 @@ public class StringUtils {
         asBytes[encodedLen] = 0;
 
         return asBytes;
+    }
+
+    /**
+     * Checks is the CharSequence contains digits only. No leading sign and thousands or decimal separators are allowed.
+     * 
+     * @param cs
+     *            The CharSequence to check.
+     * @return
+     *         {@code true} if the CharSequence not empty and contains only digits, {@code false} otherwise.
+     */
+    public static boolean isStrictlyNumeric(CharSequence cs) {
+        if (cs == null || cs.length() == 0) {
+            return false;
+        }
+        for (int i = 0; i < cs.length(); i++) {
+            if (!Character.isDigit(cs.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

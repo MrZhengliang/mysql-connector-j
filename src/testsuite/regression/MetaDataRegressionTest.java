@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -741,7 +741,7 @@ public class MetaDataRegressionTest extends BaseTestCase {
      *             if the test fails.
      */
     public void testBug7033() throws Exception {
-        if (false) { // disabled for now
+        if (!this.DISABLED_testBug7033) {
             Connection big5Conn = null;
             Statement big5Stmt = null;
             PreparedStatement big5PrepStmt = null;
@@ -757,7 +757,7 @@ public class MetaDataRegressionTest extends BaseTestCase {
                 big5Stmt = big5Conn.createStatement();
 
                 byte[] foobar = testString.getBytes("Big5");
-                System.out.println(foobar);
+                System.out.println(Arrays.toString(foobar));
 
                 this.rs = big5Stmt.executeQuery("select 1 as '\u5957 \u9910'");
                 String retrString = this.rs.getMetaData().getColumnName(1);
@@ -1705,12 +1705,14 @@ public class MetaDataRegressionTest extends BaseTestCase {
     }
 
     private void compareResultSets(ResultSet expected, ResultSet actual) throws Exception {
-        if (expected == null && actual != null) {
-            fail("Expected null result set, actual was not null.");
-        } else if (expected != null && actual == null) {
+        if (expected == null) {
+            if (actual != null) {
+                fail("Expected null result set, actual was not null.");
+            } else {
+                return;
+            }
+        } else if (actual == null) {
             fail("Expected non-null actual result set.");
-        } else if (expected == null && actual == null) {
-            return;
         }
 
         expected.last();
@@ -2375,7 +2377,9 @@ public class MetaDataRegressionTest extends BaseTestCase {
             this.rs = dbmd.getExportedKeys("x", "y", "z");
         } finally {
             try {
-                c_IS.close();
+                if (c_IS != null) {
+                    c_IS.close();
+                }
             } catch (SQLException ex) {
             }
         }
@@ -4182,5 +4186,40 @@ public class MetaDataRegressionTest extends BaseTestCase {
             }
         }
 
+    }
+
+    /**
+     * Tests fix for Bug#23212347, ALL API CALLS ON RESULTSET METADATA RESULTS IN NPE WHEN USESERVERPREPSTMTS=TRUE.
+     */
+    public void testBug23212347() throws Exception {
+        boolean useSPS = false;
+        do {
+            String testCase = String.format("Case [SPS: %s]", useSPS ? "Y" : "N");
+            createTable("testBug23212347", "(id INT)");
+
+            Properties props = new Properties();
+            props.setProperty("useServerPrepStmts", Boolean.toString(useSPS));
+
+            Connection testConn = getConnectionWithProps(props);
+            Statement testStmt = testConn.createStatement();
+            testStmt.execute("INSERT INTO testBug23212347 VALUES (1)");
+
+            this.pstmt = testConn.prepareStatement("SELECT * FROM testBug23212347 WHERE id = 1");
+            this.rs = this.pstmt.executeQuery();
+            assertTrue(testCase, this.rs.next());
+            assertEquals(testCase, 1, this.rs.getInt(1));
+            assertFalse(testCase, this.rs.next());
+            ResultSetMetaData rsmd = this.pstmt.getMetaData();
+            assertEquals(testCase, "id", rsmd.getColumnName(1));
+
+            this.pstmt = testConn.prepareStatement("SELECT * FROM testBug23212347 WHERE id = ?");
+            this.pstmt.setInt(1, 1);
+            this.rs = this.pstmt.executeQuery();
+            assertTrue(testCase, this.rs.next());
+            assertEquals(testCase, 1, this.rs.getInt(1));
+            assertFalse(this.rs.next());
+            rsmd = this.pstmt.getMetaData();
+            assertEquals(testCase, "id", rsmd.getColumnName(1));
+        } while (useSPS = !useSPS);
     }
 }

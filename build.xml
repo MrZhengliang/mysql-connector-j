@@ -1,6 +1,6 @@
 <?xml version='1.0'?>
 <!--
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -54,10 +54,31 @@ provided in the variable 'methods', then only these will be executed.
 Targets: "test", "test-multijvm"
 
 
-Compliance, coverage and instrumentation
-========================================
+Compliance
+==========
 
 This file ships with targets for these matters. Further details can be found in the respective targets.
+
+
+Coverage and instrumentation
+============================
+
+This file ships with target "test-coverage" for collecting coverage results and "report-coverage" for creating the HTML coverage report.
+The JCov library needed to run these targets can be found at http://hg.openjdk.java.net/code-tools/jcov, it's JARs should be placed
+into ${com.mysql.jdbc.extra.libs}/jcov directory.
+The "test-coverage" target instruments classes using JCov, runs tests collecting coverage info into result file set as
+${com.mysql.jdbc.coverage.result.dir}/${com.mysql.jdbc.coverage.result.name}.
+The "report-coverage" target first merges coverage result files which full paths are passed via 'com.mysql.jdbc.coverage.merge.files'
+property into file which path is passed via 'com.mysql.jdbc.coverage.merge.result' property, then builds the HTML report from
+'com.mysql.jdbc.coverage.merge.result' file into the directory passed via 'com.mysql.jdbc.coverage.report.dir' property.
+If some properties are not passed to ANT script then default values are used:
+    com.mysql.jdbc.coverage.result.dir - "${buildDir}/coverage"
+    com.mysql.jdbc.coverage.result.name - "result.xml"
+    com.mysql.jdbc.coverage.merge.files - none, merge step is skipped
+    com.mysql.jdbc.coverage.merge.result - ${com.mysql.jdbc.coverage.result.dir}/result.xml
+    com.mysql.jdbc.coverage.report.dir - ${com.mysql.jdbc.coverage.result.dir}/report
+
+Targets: "test-coverage", "report-coverage"
 
 
 MySQL Fabric support and testing
@@ -137,7 +158,7 @@ com.mysql.jdbc.noCleanBetweenCompiles=yes
 
     <property name="major_version" value="5" />
     <property name="minor_version" value="1" />
-    <property name="subminor_version" value="38" />
+    <property name="subminor_version" value="39" />
     <property name="version_status" value="" />
 
     <property name="version" value="${major_version}.${minor_version}.${subminor_version}${version_status}" />
@@ -179,13 +200,17 @@ com.mysql.jdbc.noCleanBetweenCompiles=yes
     <!-- The following property is needed for building the docs and must be passed on the command line to ant via -D switch. -->
     <property name="com.mysql.jdbc.docs.sourceDir" value="/tmp/connectorj/docs/prebuilt" />
 
-    <!-- The folloing propertyset is used to forward tests setup configurations as system variables to JUnit tasks. -->
+    <!-- The following propertyset is used to forward tests setup configurations as system variables to JUnit tasks. -->
     <propertyset id="junit.system.properties">
         <propertyref prefix="com.mysql.jdbc.test." />
         <!-- Exclude 'testsuite' properties ending with '.url', '.url.N', '.jvm' or '.jvm.N'. -->
         <propertyref regex="^com\.mysql\.jdbc\.testsuite\..*(?&lt;!(?:url|jvm)(?:\.\d)?)$" />
     </propertyset>
 
+    <!-- Java compiler arguments to widen warnings detection and fail on warnings. -->
+    <condition property="javac.compilerarg" value="-Xlint:all -Werror" else="">
+        <isset property="com.mysql.jdbc.failOnWarnings"/>
+    </condition>
 
     <!-- Classpaths settings. -->
     <path id="built.driver.only.classpath">
@@ -622,6 +647,8 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
         <property name="exceptions-exports" value="com.mysql.jdbc.exceptions;version=&quot;${osgid-version}&quot;" />
         <property name="jdbc4-exceptions-exports"
                   value="com.mysql.jdbc.exceptions.jdbc4;version=&quot;${osgid-version}&quot;;uses:=&quot;com.mysql.jdbc&quot;" />
+        <property name="fabric-exports"
+                  value="com.mysql.fabric.jdbc;version=&quot;${osgid-version}&quot;;uses:=&quot;com.mysql.jdbc&quot;" />
 
         <property name="interceptors-exports" value="com.mysql.jdbc.interceptors;version=&quot;${osgid-version}&quot;;uses:=&quot;com.mysql.jdbc&quot;" />
         <property name="integration-exports"
@@ -647,7 +674,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
             <attribute name="Bundle-ManifestVersion" value="2" />
             <attribute name="Bundle-SymbolicName" value="com.mysql.jdbc" />
             <attribute name="Export-Package"
-                       value="${driver-exports},${jee-exports},${logging-exports},${profiling-exports},${util-exports},${exceptions-exports},${jdbc4-exceptions-exports},${interceptors-exports},${integration-exports},${configs-exports},${legacy-exports}" />
+                       value="${driver-exports},${jee-exports},${logging-exports},${profiling-exports},${util-exports},${exceptions-exports},${jdbc4-exceptions-exports},${interceptors-exports},${integration-exports},${configs-exports},${legacy-exports},${fabric-exports}" />
             <attribute name="Import-Package" value="${crypto-imports},${jdbc4-imports},${jee-imports},${integration-imports}" />
         </manifest>
 
@@ -685,7 +712,6 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
             <exclude name="**/*.nb*" />
             <exclude name="**/*.bak" />
             <exclude name="**/*.*~" />
-            <exclude name="**/lib-coverage/*" />
             <exclude name="**/clover/*" />
             <exclude name="**/checkstyle/*" />
             <exclude name="**/.*" />
@@ -840,6 +866,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
             <exclude name="**/HibernateFabric.java" />
             <exclude name="com/mysql/jdbc/exceptions/jdbc4/*" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
     </target>
 
@@ -866,6 +893,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
             <exclude name="**/JDBC42*.java" />
             <include name="com/mysql/jdbc/exceptions/jdbc4/*" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
 
         <javac sourcepath=""
@@ -881,6 +909,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
                target="1.8">
             <include name="**/JDBC42*.java" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
     </target>
 
@@ -906,6 +935,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
             <exclude name="testsuite/requiresNonRedists/**" />
             <exclude name="testsuite/**/jdbc4*/**" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
 
         <javac sourcepath=""
@@ -922,6 +952,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
                target="1.6">
             <include name="testsuite/**/jdbc4/**" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
 
         <javac sourcepath=""
@@ -937,6 +968,7 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
                target="1.8">
             <include name="testsuite/**/jdbc42/**" />
             <classpath refid="project.build.classpath" />
+            <compilerarg line="${javac.compilerarg}" />
         </javac>
     </target>
 
@@ -1154,14 +1186,18 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
 
             <syspropertyset refid="junit.system.properties" />
             <sysproperty key="com.mysql.jdbc.testsuite.url" value="${com.mysql.jdbc.testsuite.url.final}" />
+            <sysproperty key="jcov.template" value="${com.mysql.jdbc.coverage.result.dir.final}/template.xml"/>
+            <sysproperty key="jcov.file" value="${com.mysql.jdbc.coverage.result.dir.final}/${com.mysql.jdbc.coverage.result.name.final}"/>
 
             <classpath>
+                <pathelement location="${com.mysql.jdbc.extra.libs}/jcov/jcov_file_saver.jar" />
                 <fileset dir="${com.mysql.jdbc.extra.libs}">
                     <include name="**/*.jar" />
                 </fileset>
                 <fileset dir="${buildDir}/${fullProdName}/lib">
                     <include name="**/*.jar" />
                 </fileset>
+                <pathelement location="${buildDir}/${fullProdName}-instr" />
                 <pathelement location="${buildDir}/${fullProdName}" />
                 <pathelement path="${java.class.path}" />
             </classpath>
@@ -1202,14 +1238,18 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
 
             <syspropertyset refid="junit.system.properties" />
             <sysproperty key="com.mysql.jdbc.testsuite.url" value="${com.mysql.jdbc.testsuite.url.final}" />
+            <sysproperty key="jcov.template" value="${com.mysql.jdbc.coverage.result.dir.final}/template.xml"/>
+            <sysproperty key="jcov.file" value="${com.mysql.jdbc.coverage.result.dir.final}/${com.mysql.jdbc.coverage.result.name.final}"/>
 
             <classpath>
+                <pathelement location="${com.mysql.jdbc.extra.libs}/jcov/jcov_file_saver.jar" />
                 <fileset dir="${com.mysql.jdbc.extra.libs}">
                     <include name="**/*.jar" />
                 </fileset>
                 <fileset dir="${buildDir}/${fullProdName}/lib">
                     <include name="**/*.jar" />
                 </fileset>
+                <pathelement location="${buildDir}/${fullProdName}-instr" />
                 <pathelement location="${buildDir}/${fullProdName}" />
                 <pathelement path="${java.class.path}" />
             </classpath>
@@ -1224,14 +1264,14 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
         </junit>
 
         <local name="test.message.jdbc42" />
-        <condition property="test.message.jdbc4"
+        <condition property="test.message.jdbc42"
                    value="Running JDBC 4.2 unit tests against '${com.mysql.jdbc.testsuite.url.final}' with jvm '${com.mysql.jdbc42.testsuite.jvm.java}'"
                    else="">
             <not>
                 <isset property="test" />
             </not>
         </condition>
-        <echo>${test.message.jdbc4}</echo>
+        <echo>${test.message.jdbc42}</echo>
 
         <junit printsummary="yes"
                fork="on"
@@ -1243,14 +1283,18 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
 
             <syspropertyset refid="junit.system.properties" />
             <sysproperty key="com.mysql.jdbc.testsuite.url" value="${com.mysql.jdbc.testsuite.url.final}" />
+            <sysproperty key="jcov.template" value="${com.mysql.jdbc.coverage.result.dir.final}/template.xml"/>
+            <sysproperty key="jcov.file" value="${com.mysql.jdbc.coverage.result.dir.final}/${com.mysql.jdbc.coverage.result.name.final}"/>
 
             <classpath>
+                <pathelement location="${com.mysql.jdbc.extra.libs}/jcov/jcov_file_saver.jar" />
                 <fileset dir="${com.mysql.jdbc.extra.libs}">
                     <include name="**/*.jar" />
                 </fileset>
                 <fileset dir="${buildDir}/${fullProdName}/lib">
                     <include name="**/*.jar" />
                 </fileset>
+                <pathelement location="${buildDir}/${fullProdName}-instr" />
                 <pathelement location="${buildDir}/${fullProdName}" />
                 <pathelement path="${java.class.path}" />
             </classpath>
@@ -1413,230 +1457,62 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
     </target>
 
 
-    <!-- ******************************************* -->
-    <!-- ***** CODE COVERAGE & INSTRUMENTATION ***** -->
-    <!-- ******************************************* -->
+    <!-- ********************************* -->
+    <!-- ***** TESTING CODE COVERAGE ***** -->
+    <!-- ********************************* -->
 
 
-    <!-- Following targets are for code coverage and depend on the 'Emma' project which can be downloaded from [http://emma.sourceforge.net/]. -->
+    <target name="test-coverage" depends="-jcov-instrument, test" description="Runs tests collecting coverage results."/>
 
-    <!-- Turn on EMMA instrumentation/reporting. -->
-    <target name="emma" description="Turns on EMMA instrumentation/reporting.">
-        <!-- directory that contains emma.jar and emma_ant.jar: -->
-        <property name="emma.dir" value="${sourceDir}/lib-coverage" />
 
-        <path id="emma.lib">
-            <pathelement location="${emma.dir}/emma.jar" />
-            <pathelement location="${emma.dir}/emma_ant.jar" />
-        </path>
+    <target name="-jcov-instrument" depends="compile-driver, -set-test-coverage-detaults">
+        <mkdir dir="${buildDir}/${fullProdName}-instr"/>
+        <mkdir dir="${com.mysql.jdbc.coverage.result.dir.final}"/>
+        <delete file="${com.mysql.jdbc.coverage.result.dir.final}/template.xml"/>
 
-        <taskdef resource="emma_ant.properties" classpathref="emma.lib" />
-
-        <property name="emma.enabled" value="true" />
-        <property name="emma.coverage.dir" value="${buildDir}/${fullProdName}-coverage" />
+        <java fork="true" jvm="${com.mysql.jdbc.jdk8}/bin/java" classname="com.sun.tdk.jcov.Instr" classpathref="project.build.classpath">
+            <arg line="-e testsuite.* -e demo.* -t ${com.mysql.jdbc.coverage.result.dir.final}/template.xml -output ${buildDir}/${fullProdName}-instr ${buildDir}/${fullProdName}" />
+        </java>
     </target>
 
 
-    <!-- Run the full test suite and compliance test suite, against multiple JVMs and server configs, producing coverage reports. -->
-    <target name="test-all-multi-report"
-            description="Runs the full test suite and compliance test suite, against multiple JVMs and server configs, producing coverage reports."
-            depends="test-coverage-multijvm, test-coverage-compliance-multijvm">
-        <emma enabled="${emma.enabled}">
-            <report sourcepath="${buildDir}/${fullProdName}">
-                <fileset dir="${emma.coverage.dir}">
-                    <include name="*.emma" />
-                </fileset>
-                <txt outfile="${emma.coverage.dir}/coverage.txt" />
-                <html outfile="${emma.coverage.dir}/coverage.html" />
-            </report>
-        </emma>
+    <target name="-set-test-coverage-detaults">
+        <condition property="com.mysql.jdbc.coverage.result.dir.final" value="${com.mysql.jdbc.coverage.result.dir}" else="${buildDir}/coverage">
+            <isset property="com.mysql.jdbc.coverage.result.dir" />
+        </condition>
+        <condition property="com.mysql.jdbc.coverage.result.name.final" value="${com.mysql.jdbc.coverage.result.name}" else="result.xml">
+            <isset property="com.mysql.jdbc.coverage.result.name" />
+        </condition>
     </target>
 
 
-    <!-- Run the full test suite and compliance test suite, against one JVM and one server config, producing coverage reports. -->
-    <target name="test-all-report"
-            description="Runs the full test suite and compliance test suite, against one JVM and one server config, producing coverage reports."
-            depends="test-coverage, test-coverage-compliance">
-        <emma enabled="${emma.enabled}">
-            <report sourcepath="${buildDir}/${fullProdName}">
-                <fileset dir="${emma.coverage.dir}">
-                    <include name="*.emma" />
-                </fileset>
-                <txt outfile="${emma.coverage.dir}/coverage.txt" />
-                <html outfile="${emma.coverage.dir}/coverage.html" />
-            </report>
-        </emma>
+    <!-- *********************************** -->
+    <!-- ***** REPORTING CODE COVERAGE ***** -->
+    <!-- *********************************** -->
+
+
+    <target name="report-coverage" depends="-jcov-merge, -set-report-coverage-detaults" description="Merges coverage results and creates HTML coverage report.">
+        <mkdir dir="${com.mysql.jdbc.coverage.report.dir.final}"/>
+        <java fork="true" jvm="${com.mysql.jdbc.jdk8}/bin/java" classname="com.sun.tdk.jcov.RepGen" classpathref="project.build.classpath">
+            <arg line="-e testsuite.* -e demo.* -src ${sourceDir} -o ${com.mysql.jdbc.coverage.report.dir.final} ${com.mysql.jdbc.coverage.merge.result.final}" />
+        </java>
     </target>
 
 
-    <!-- Add bytecode instrumentation. -->
-    <target name="-emma-instrument" depends="init, compile, emma">
-        <emma enabled="${emma.enabled}">
-            <instr instrpathref="built.driver.only.classpath"
-                   destdir="${compiler.output}"
-                   metadatafile="${emma.coverage.dir}/metadata.emma"
-                   merge="true"
-                   mode="overwrite">
-                <filter excludes="*Test*" />
-                <filter excludes="org.junit.*" />
-            </instr>
-        </emma>
+    <target name="-jcov-merge" depends="-set-report-coverage-detaults" if="com.mysql.jdbc.coverage.merge.files">
+        <java fork="true" jvm="${com.mysql.jdbc.jdk8}/bin/java" classname="com.sun.tdk.jcov.Merger" classpathref="project.build.classpath">
+            <arg line="-o ${com.mysql.jdbc.coverage.merge.result.final} ${com.mysql.jdbc.coverage.merge.files}" />
+        </java>
     </target>
 
 
-    <!-- Run the full test suite against multiple JVMs and server configs, collecting coverage data. -->
-    <target name="test-coverage-multijvm"
-            description="Runs the full test suite against multiple JVMs and server configs, collecting coverage data."
-            depends="-emma-instrument">
-        <array8 arrayproperty="com.mysql.jdbc.testsuite.jvm" outputproperty="jvm.value" indexproperty="jvm.index">
-            <array8 arrayproperty="com.mysql.jdbc.testsuite.url" outputproperty="url.value" indexproperty="url.index">
-                <local name="test.run" />
-                <condition property="test.run">
-                    <and>
-                        <isset property="jvm.value" />
-                        <isset property="url.value" />
-                    </and>
-                </condition>
-                <antcall target="-test-multijvm-iteration">
-                    <param name="jvm.value" value="${jvm.value}" />
-                    <param name="url.value" value="${url.value}" />
-                    <param name="url.index" value="${url.index}" />
-                    <param name="test.mode" value="testsuite" />
-                    <param name="test.target" value="test-coverage" />
-                    <param name="test.run" value="${test.run}" />
-                </antcall>
-            </array8>
-        </array8>
-    </target>
-
-
-    <!-- Run the full test suite against one JVMs and one server config, collecting coverage data. -->
-    <target name="test-coverage"
-            description="Runs the full test suite against one JVMs and one server config, collecting coverage data."
-            depends="-testsuite-url-check, -testsuite-jvm-check, -set-test-result-prefix, -emma-instrument">
-        <property name="junit.unitregress.results" value="${junit.results}/${test.result.prefix}/unitregress" />
-
-        <mkdir dir="${junit.unitregress.results}/report" />
-
-        <echo>Running tests against '${com.mysql.jdbc.testsuite.url.final}' with jvm '${com.mysql.jdbc3.testsuite.jvm.java}' while collecting coverage data</echo>
-
-        <junit printsummary="yes" fork="on" forkmode="once" jvm="${com.mysql.jdbc3.testsuite.jvm.java}">
-            <jvmarg value="-Xmx1024m" />
-            <jvmarg value="-Demma.coverage.out.file=${emma.coverage.dir}/coverage.emma" />
-            <jvmarg value="-Demma.coverage.out.merge=true" />
-
-            <syspropertyset refid="junit.system.properties" />
-            <sysproperty key="com.mysql.jdbc.testsuite.url" value="${com.mysql.jdbc.testsuite.url.final}" />
-
-            <classpath>
-                <fileset dir="${com.mysql.jdbc.extra.libs}">
-                    <include name="**/*.jar" />
-                </fileset>
-                <fileset dir="${buildDir}/${fullProdName}/lib">
-                    <include name="**/*.jar" />
-                </fileset>
-                <pathelement location="${buildDir}/${fullProdName}" />
-                <pathelement path="${java.class.path}" />
-                <pathelement location="${emma.dir}/emma.jar" />
-                <pathelement location="${emma.dir}/emma_ant.jar" />
-            </classpath>
-
-            <formatter type="xml" />
-
-            <batchtest fork="yes" todir="${junit.unitregress.results}">
-                <fileset dir="${buildDir}/${fullProdName}">
-                    <include name="**/*Test.java" />
-                    <exclude name="**/fabric/*.java" />
-                    <exclude name="**/perf/*.java" />
-                </fileset>
-            </batchtest>
-        </junit>
-
-        <junitreport todir="${junit.unitregress.results}/report">
-            <fileset dir="${junit.unitregress.results}">
-                <include name="**/TEST-*.xml" />
-            </fileset>
-            <report format="frames" todir="${junit.unitregress.results}/report" />
-        </junitreport>
-    </target>
-
-
-    <!-- Run compliance test suite against multiple JVMs and server configs, collecting coverage data. -->
-    <target name="test-coverage-compliance-multijvm"
-            description="Runs compliance test suite against multiple JVMs and server configs, collecting coverage data."
-            depends="-emma-instrument">
-        <array8 arrayproperty="com.mysql.jdbc.testsuite.jvm" outputproperty="jvm.value" indexproperty="jvm.index">
-            <array8 arrayproperty="com.mysql.jdbc.compliance.url" outputproperty="url.value" indexproperty="url.index">
-                <local name="test.run" />
-                <condition property="test.run">
-                    <and>
-                        <isset property="jvm.value" />
-                        <isset property="url.value" />
-                    </and>
-                </condition>
-                <antcall target="-test-multijvm-iteration">
-                    <param name="jvm.value" value="${jvm.value}" />
-                    <param name="url.value" value="${url.value}" />
-                    <param name="url.index" value="${url.index}" />
-                    <param name="test.mode" value="compliance" />
-                    <param name="test.target" value="test-coverage-compliance" />
-                    <param name="test.run" value="${test.run}" />
-                </antcall>
-            </array8>
-        </array8>
-    </target>
-
-
-    <!-- Run compliance test suite against one JVM and one server config, collecting coverage data. -->
-    <target name="test-coverage-compliance"
-            description="Runs compliance test suite against one JVM and one server config, collecting coverage data."
-            depends="-compliance-url-check, -testsuite-jvm-check, -set-test-result-prefix, -emma-instrument">
-        <property name="junit.compliance.results" value="${junit.results}/${test.result.prefix}/compliance" />
-
-        <mkdir dir="${junit.compliance.results}/report" />
-
-        <echo>Running compliance test suite against '${com.mysql.jdbc.compliance.url.final}' with jvm '${com.mysql.jdbc3.testsuite.jvm.java}' while collecting coverage data</echo>
-
-        <junit printsummary="yes" fork="on" forkmode="once" jvm="${com.mysql.jdbc3.testsuite.jvm.java}">
-            <jvmarg value="-Xmx1024m" />
-            <jvmarg value="-Demma.coverage.out.file=${emma.coverage.dir}/coverage.emma" />
-            <jvmarg value="-Demma.coverage.out.merge=true" />
-
-            <syspropertyset refid="junit.system.properties" />
-            <sysproperty key="com.mysql.jdbc.compliance.url" value="${com.mysql.jdbc.compliance.url.final}" />
-
-            <classpath>
-                <fileset dir="${com.mysql.jdbc.extra.libs}">
-                    <include name="**/*.jar" />
-                </fileset>
-                <fileset dir="${buildDir}/${fullProdName}/lib">
-                    <include name="**/*.jar" />
-                </fileset>
-                <pathelement location="${buildDir}/${fullProdName}" />
-                <pathelement path="${java.class.path}" />
-                <pathelement location="${jdbc.compliance.location}" />
-                <pathelement location="${emma.dir}/emma.jar" />
-                <pathelement location="${emma.dir}/emma_ant.jar" />
-            </classpath>
-
-            <formatter type="xml" />
-
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.BatchUpdateTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.ConnectionTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.DatabaseMetaDataTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.EscapeSyntaxTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.PreparedStatementTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.ResultSetMetadataTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.ResultSetTest" />
-            <test fork="yes" todir="${junit.compliance.results}" name="com.mysql.jdbc.compliance.tests.StatementTest" />
-        </junit>
-
-        <junitreport todir="${junit.compliance.results}/report">
-            <fileset dir="${junit.compliance.results}">
-                <include name="**/TEST-*.xml" />
-            </fileset>
-            <report format="frames" todir="${junit.compliance.results}/report" />
-        </junitreport>
+    <target name="-set-report-coverage-detaults" depends="-set-test-coverage-detaults">
+        <condition property="com.mysql.jdbc.coverage.merge.result.final" value="${com.mysql.jdbc.coverage.merge.result}" else="${com.mysql.jdbc.coverage.result.dir.final}/result.xml">
+            <isset property="com.mysql.jdbc.coverage.merge.result" />
+        </condition>
+        <condition property="com.mysql.jdbc.coverage.report.dir.final" value="${com.mysql.jdbc.coverage.report.dir}" else="${com.mysql.jdbc.coverage.result.dir.final}/report">
+            <isset property="com.mysql.jdbc.coverage.report.dir" />
+        </condition>
     </target>
 
 
@@ -1730,8 +1606,6 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
 
             <java fork="true" jvm="${jvm.java}" classname="com.mysql.jdbc.util.VersionFSHierarchyMaker">
                 <jvmarg value="-Xmx1024m" />
-                <jvmarg value="-Demma.coverage.out.file=${emma.coverage.dir}/coverage.emma" />
-                <jvmarg value="-Demma.coverage.out.merge=true" />
 
                 <sysproperty key="com.mysql.jdbc.testsuite.url" value="@{jdbcUrl}" />
 
@@ -1744,8 +1618,6 @@ Java 8 (for JDBC 4+ implementation) is also required. Set the full path to this 
                     </fileset>
                     <pathelement location="${buildDir}/${fullProdName}" />
                     <pathelement path="${java.class.path}" />
-                    <pathelement location="${emma.dir}/emma.jar" />
-                    <pathelement location="${emma.dir}/emma_ant.jar" />
                 </classpath>
 
                 <arg line="@{junitOutput} @{junitOutput}/hier @{jdbcUrlIter}" />

@@ -1,5 +1,42 @@
 # Changelog
 # $Id$
+04-29-16 - Version 5.1.39
+
+  - Fix for Bug#23212347, ALL API CALLS ON RESULTSET METADATA RESULTS IN NPE WHEN USESERVERPREPSTMTS=TRUE.
+
+  - Fix for Bug#23201930, CLIENT HANG WHEN RSLT CUNCURRENCY=CONCUR_UPDATABLE AND RSLTSET TYPE=FORWARD_ONLY.
+
+  - Fix for Bug#23188498, CLIENT HANG WHILE USING SERVERPREPSTMT WHEN PROFILESQL=TRUE AND USEIS=TRUE.
+
+  - Fix for Bug#22678872, NPE DURING UPDATE WITH FABRIC.
+    New property 'loadBalanceHostRemovalGracePeriod' sets the grace period when removing hosts from a load-balanced connection.
+
+  - Fix for Bug#71131 (18068303), Poor error message in CallableStatement.java.
+
+  - Fix for Bug#59462 (16736619), ConcurrentModificationException inside ConnectionImpl.closeAllOpenStatements().
+
+  - Fix for Bug#22848249, LOADBALANCECONNECTIONGROUPMANAGER.REMOVEHOST() NOT WORKING AS EXPECTED.
+
+  - Fix for Bug#22730682, ARRAYINDEXOUTOFBOUNDSEXCEPTION FROM CONNECTIONGROUPMANAGER.REMOVEHOST().
+
+  - Fix for Bug#56479 (16738378), getTimestamp throws exception.
+
+  - Fix for Bug#79598 (22352812), Client side Prepared Statement caching bypasses JDBC42 Java 8 Time conversion.
+
+  - Fix for Bug#77171 (21181466), On every connect getting sql_mode from server creates unnecessary exception.
+
+  - Fix for Bug#79343 (22353759), NPE in TimeUtil.loadTimeZoneMappings causing server time zone value unrecognized.
+
+  - Fix for Bug#80522 (22833410), Using useCursorFetch leads to data corruption in Connector/J for TIME type.
+
+  - Deprecate the EOF packet.
+
+  - Fix for Bug#75956, Inserting timestamps using a server PreparedStatement and useLegacyDatetimeCode=false
+
+  - Fix for Bug#22385172, CONNECTOR/J MANIFEST DOES NOT EXPOSE FABRIC (OSGi).
+
+  - Fix for Bug#22598938, FABRICMYSQLDATASOURCE.GETCONNECTION() NPE AFTER SWITCHOVER.
+
 11-30-15 - Version 5.1.38
 
   - Fix for Bug#21286268, CONNECTOR/J REPLICATION USE MASTER IF SLAVE IS UNAVAILABLE.

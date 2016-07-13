@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2015, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -95,6 +95,7 @@ import com.mysql.fabric.jdbc.ErrorReportingExceptionInterceptor;
 import com.mysql.jdbc.AuthenticationPlugin;
 import com.mysql.jdbc.Buffer;
 import com.mysql.jdbc.CharsetMapping;
+import com.mysql.jdbc.ConnectionGroupManager;
 import com.mysql.jdbc.ConnectionImpl;
 import com.mysql.jdbc.ConnectionProperties;
 import com.mysql.jdbc.Driver;
@@ -369,7 +370,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             // ignore
         }
 
-        reconnectableConn.createStatement().executeQuery("SELECT 1");
+        this.rs = reconnectableConn.createStatement().executeQuery("SELECT 1");
 
         assertTrue(reconnectableConn.isReadOnly() == isReadOnly);
     }
@@ -546,7 +547,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
                     // we expect this one
                 }
 
-                failoverStmt.executeQuery("SELECT connection_id()");
+                this.rs = failoverStmt.executeQuery("SELECT connection_id()");
             } finally {
                 if (adminConnection != null) {
                     adminConnection.close();
@@ -598,7 +599,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             String originalConnectionId = getSingleIndexedValueWithQuery(failoverConnection, 1, "SELECT CONNECTION_ID()").toString();
 
             for (int i = 0; i < 50; i++) {
-                failoverConnection.createStatement().executeQuery("SELECT 1");
+                this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
             }
 
             UnreliableSocketFactory.dontDownHost("master");
@@ -610,7 +611,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             assertEquals("/master", UnreliableSocketFactory.getHostFromLastConnection());
             assertFalse(newConnectionId.equals(originalConnectionId));
 
-            failoverConnection.createStatement().executeQuery("SELECT 1");
+            this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
         } finally {
             UnreliableSocketFactory.flushAllStaticData();
 
@@ -988,9 +989,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             } catch (SQLException sqlEx) {
                 assertEquals(currentOpenStatements, ((com.mysql.jdbc.Connection) bareConn).getActiveStatementCount());
             } finally {
-                if (bareConn != null) {
-                    bareConn.close();
-                }
+                bareConn.close();
             }
         }
     }
@@ -2740,8 +2739,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
         ds.setUrl(newUrl);
 
         Connection c = ds.getPooledConnection().getConnection();
-        c.createStatement().executeQuery("SELECT 1");
-        c.prepareStatement("SELECT 1").executeQuery();
+        this.rs = c.createStatement().executeQuery("SELECT 1");
+        this.rs = c.prepareStatement("SELECT 1").executeQuery();
     }
 
     public void testBug48605() throws Exception {
@@ -3100,7 +3099,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             assert (endConnCount > 0);
 
             if (endConnCount - startConnCount >= 20) { // this may be bogus if run on a real system, we should probably look to see they're coming from this
-                                                      // testsuite?
+                                                          // testsuite?
                 fail("We're leaking connections even when not failed over");
             }
         } finally {
@@ -3158,13 +3157,13 @@ public class ConnectionRegressionTest extends BaseTestCase {
             assertEquals("/master", UnreliableSocketFactory.getHostFromLastConnection());
 
             for (int i = 0; i < 50; i++) {
-                failoverConnection.createStatement().executeQuery("SELECT 1");
+                this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
             }
 
             UnreliableSocketFactory.downHost("master");
 
             try {
-                failoverConnection.createStatement().executeQuery("SELECT 1"); // this should fail and trigger failover
+                this.rs = failoverConnection.createStatement().executeQuery("SELECT 1"); // this should fail and trigger failover
                 fail("Expected exception");
             } catch (SQLException sqlEx) {
                 assertEquals("08S01", sqlEx.getSQLState());
@@ -3173,14 +3172,14 @@ public class ConnectionRegressionTest extends BaseTestCase {
             failoverConnection.setAutoCommit(true);
             assertEquals("/slave", UnreliableSocketFactory.getHostFromLastConnection());
             assertTrue(!failoverConnection.isReadOnly());
-            failoverConnection.createStatement().executeQuery("SELECT 1");
-            failoverConnection.createStatement().executeQuery("SELECT 1");
+            this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
+            this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
             UnreliableSocketFactory.dontDownHost("master");
             Thread.sleep(2000);
             failoverConnection.setAutoCommit(true);
-            failoverConnection.createStatement().executeQuery("SELECT 1");
+            this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
             assertEquals("/master", UnreliableSocketFactory.getHostFromLastConnection());
-            failoverConnection.createStatement().executeQuery("SELECT 1");
+            this.rs = failoverConnection.createStatement().executeQuery("SELECT 1");
         } finally {
             UnreliableSocketFactory.flushAllStaticData();
 
@@ -3235,11 +3234,11 @@ public class ConnectionRegressionTest extends BaseTestCase {
         }
 
         assertTrue(detectedDeadConn);
-        rConn.prepareStatement("SELECT 1").executeQuery();
+        this.rs = rConn.prepareStatement("SELECT 1").executeQuery();
 
         Connection rConn2 = getConnectionWithProps(
                 "autoReconnect=true,initialTimeout=2,maxReconnects=3,cacheServerConfiguration=true,elideSetAutoCommits=true");
-        rConn2.prepareStatement("SELECT 1").executeQuery();
+        this.rs = rConn2.prepareStatement("SELECT 1").executeQuery();
 
     }
 
@@ -3275,7 +3274,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
                 }
             }
 
-            testStmt.executeQuery("SELECT 1");
+            this.rs = testStmt.executeQuery("SELECT 1");
         }
         testConn.close();
     }
@@ -5137,8 +5136,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
             this.stmt = failoverconnection[i].createStatement();
             this.pstmt = failoverconnection[i].prepareStatement("SELECT 1 FROM DUAL");
             for (int j = 0; j < 10000; j++) {
-                this.pstmt.executeQuery();
-                this.stmt.executeQuery("SELECT 1 FROM DUAL");
+                this.rs = this.pstmt.executeQuery();
+                this.rs = this.stmt.executeQuery("SELECT 1 FROM DUAL");
             }
         }
 
@@ -5562,17 +5561,15 @@ public class ConnectionRegressionTest extends BaseTestCase {
             if (resultSet != null) {
                 resultSet.close();
             }
-            if (statement != null) {
-                statement.close();
+
+            statement.close();
+
+            if (finType == 1) {
+                connection.close();
+            } else if (finType == 2) {
+                ((com.mysql.jdbc.Connection) connection).abortInternal();
             }
-            if (connection != null) {
-                if (finType == 1) {
-                    connection.close();
-                } else if (finType == 2) {
-                    ((com.mysql.jdbc.Connection) connection).abortInternal();
-                }
-                connection = null;
-            }
+            connection = null;
         }
 
         // 2. Count connections before GC
@@ -5648,7 +5645,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
             props.setProperty("password", "msandbox");
             props.remove(NonRegisteringDriver.DBNAME_PROPERTY_KEY);
             c2 = DriverManager.getConnection(url + "/\u30C6\u30B9\u30C8\u30C6\u30B9\u30C8\u30C6\u30B9\u30C8", props);
-            c2.createStatement().executeQuery("select 1");
+            this.rs = c2.createStatement().executeQuery("select 1");
             c2.close();
 
         } catch (SQLException e) {
@@ -5656,7 +5653,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
 
             props.setProperty("user", "\u30C6\u30B9\u30C8\u30C6\u30B9\u30C8");
             c2 = DriverManager.getConnection(url + "/\u30C6\u30B9\u30C8\u30C6\u30B9\u30C8", props);
-            c2.createStatement().executeQuery("select 1");
+            this.rs = c2.createStatement().executeQuery("select 1");
             c2.close();
         } finally {
             if (c2 != null) {
@@ -5752,7 +5749,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
         testResultSet = testStatement.executeQuery("SELECT 1");
 
         // 1. Statement.execute() & Statement.getMoreResults()
-        testStatement.executeQuery("CALL testBug69746_proc");
+        this.rs = testStatement.executeQuery("CALL testBug69746_proc");
         assertFalse("ResultSet should not be closed.", isResultSetClosedForTestBug69746(testResultSet));
 
         ResultSet testResultSet2 = testStatement.getResultSet();
@@ -5785,7 +5782,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
         assertFalse("ResultSet should not be closed.", isResultSetClosedForTestBug69746(testResultSet));
 
         // 3. Statement.executeQuery()
-        testStatement.executeQuery("SELECT 2");
+        this.rs = testStatement.executeQuery("SELECT 2");
         assertFalse("ResultSet should not be closed.", isResultSetClosedForTestBug69746(testResultSet));
 
         // 4. Statement.executeUpdate()
@@ -5922,30 +5919,33 @@ public class ConnectionRegressionTest extends BaseTestCase {
                 break;
             }
         }
-        Method propMethod = propClass.getDeclaredMethod("getValueAsInt");
-        propMethod.setAccessible(true);
 
-        for (int i = 0; i < testMemUnits.length; i++) {
-            for (int j = 0; j < testMemUnits[i].length; j++) {
-                // testing with memory values under 2GB because higher values aren't supported.
-                connWithMemProps = (com.mysql.jdbc.Connection) getConnectionWithProps(
-                        String.format("blobSendChunkSize=1.2%1$s,largeRowSizeThreshold=1.4%1$s,locatorFetchBufferSize=1.6%1$s", testMemUnits[i][j]));
+        if (propClass != null) {
+            Method propMethod = propClass.getDeclaredMethod("getValueAsInt");
+            propMethod.setAccessible(true);
 
-                // test values of property 'blobSendChunkSize'
-                assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'blobSendChunkSize'", (int) (memMultiplier[i] * 1.2),
-                        connWithMemProps.getBlobSendChunkSize());
+            for (int i = 0; i < testMemUnits.length; i++) {
+                for (int j = 0; j < testMemUnits[i].length; j++) {
+                    // testing with memory values under 2GB because higher values aren't supported.
+                    connWithMemProps = (com.mysql.jdbc.Connection) getConnectionWithProps(
+                            String.format("blobSendChunkSize=1.2%1$s,largeRowSizeThreshold=1.4%1$s,locatorFetchBufferSize=1.6%1$s", testMemUnits[i][j]));
 
-                // test values of property 'largeRowSizeThreshold'
-                assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'largeRowSizeThreshold'", "1.4" + testMemUnits[i][j],
-                        connWithMemProps.getLargeRowSizeThreshold());
-                assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'largeRowSizeThreshold'", (int) (memMultiplier[i] * 1.4),
-                        ((Integer) propMethod.invoke(propField.get(connWithMemProps))).intValue());
+                    // test values of property 'blobSendChunkSize'
+                    assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'blobSendChunkSize'", (int) (memMultiplier[i] * 1.2),
+                            connWithMemProps.getBlobSendChunkSize());
 
-                // test values of property 'locatorFetchBufferSize'
-                assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'locatorFetchBufferSize'", (int) (memMultiplier[i] * 1.6),
-                        connWithMemProps.getLocatorFetchBufferSize());
+                    // test values of property 'largeRowSizeThreshold'
+                    assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'largeRowSizeThreshold'", "1.4" + testMemUnits[i][j],
+                            connWithMemProps.getLargeRowSizeThreshold());
+                    assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'largeRowSizeThreshold'", (int) (memMultiplier[i] * 1.4),
+                            ((Integer) propMethod.invoke(propField.get(connWithMemProps))).intValue());
 
-                connWithMemProps.close();
+                    // test values of property 'locatorFetchBufferSize'
+                    assertEquals("Memory unit '" + testMemUnits[i][j] + "'; property 'locatorFetchBufferSize'", (int) (memMultiplier[i] * 1.6),
+                            connWithMemProps.getLocatorFetchBufferSize());
+
+                    connWithMemProps.close();
+                }
             }
         }
     }
@@ -6104,20 +6104,39 @@ public class ConnectionRegressionTest extends BaseTestCase {
      * @throws Exception
      */
     public void testBug71038() throws Exception {
-        long cnt0 = 0;
-        long cnt1 = 0;
-        for (int i = 0; i < 1000; i++) {
-            cnt0 -= System.currentTimeMillis();
-            Connection c = getConnectionWithProps("detectCustomCollations=false");
-            cnt0 += System.currentTimeMillis();
-            c.close();
-            cnt1 -= System.currentTimeMillis();
-            c = getConnectionWithProps("detectCustomCollations=true");
-            cnt1 += System.currentTimeMillis();
-            c.close();
+        Properties p = new Properties();
+        p.setProperty("useSSL", "false");
+        p.setProperty("detectCustomCollations", "false");
+        p.setProperty("statementInterceptors", Bug71038StatementInterceptor.class.getName());
+
+        MySQLConnection c = (MySQLConnection) getConnectionWithProps(p);
+        Bug71038StatementInterceptor si = (Bug71038StatementInterceptor) c.getStatementInterceptorsInstances().get(0);
+        assertTrue("SHOW COLLATION was issued when detectCustomCollations=false", si.cnt == 0);
+        c.close();
+
+        p.setProperty("detectCustomCollations", "true");
+        p.setProperty("statementInterceptors", Bug71038StatementInterceptor.class.getName());
+
+        c = (MySQLConnection) getConnectionWithProps(p);
+        si = (Bug71038StatementInterceptor) c.getStatementInterceptorsInstances().get(0);
+        assertTrue("SHOW COLLATION wasn't issued when detectCustomCollations=true", si.cnt > 0);
+        c.close();
+    }
+
+    /**
+     * Counts the number of issued "SHOW COLLATION" statements.
+     */
+    public static class Bug71038StatementInterceptor extends BaseStatementInterceptor {
+        int cnt = 0;
+
+        @Override
+        public ResultSetInternalMethods preProcess(String sql, com.mysql.jdbc.Statement interceptedStatement, com.mysql.jdbc.Connection connection)
+                throws SQLException {
+            if (sql.contains("SHOW COLLATION")) {
+                this.cnt++;
+            }
+            return null;
         }
-        System.out.println("detectCustomCollations=false: " + cnt0 + "\ndetectCustomCollations=true : " + cnt1);
-        assertTrue(cnt0 < cnt1);
     }
 
     /**
@@ -6392,7 +6411,7 @@ public class ConnectionRegressionTest extends BaseTestCase {
         dataSource.setUrl(url);
         XAConnection xaConn = dataSource.getXAConnection();
         Statement st = xaConn.getConnection().createStatement();
-        st.executeQuery("SELECT 1;");
+        this.rs = st.executeQuery("SELECT 1;");
         xaConn.close();
     }
 
@@ -6522,11 +6541,12 @@ public class ConnectionRegressionTest extends BaseTestCase {
          */
         try {
             Connection testConn = getConnectionWithProps("socketFactory=testsuite.regression.ConnectionRegressionTest$TestBug73053SocketFactory");
-            Statement testStmt = this.conn.createStatement();
-            testStmt.executeQuery("SELECT 1");
+            Statement testStmt = testConn.createStatement();
+            this.rs = testStmt.executeQuery("SELECT 1");
             testStmt.close();
             testConn.close();
         } catch (SQLException e) {
+            e.printStackTrace();
             fail("No SQLException should be thrown.");
         }
 
@@ -8587,7 +8607,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
             final Connection localTestConn = testConn;
             assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
                 public Void call() throws Exception {
-                    localTestConn.createStatement().executeQuery("SELECT 1");
+                    ResultSet rset = localTestConn.createStatement().executeQuery("SELECT 1");
+                    rset.next();
                     return null;
                 }
             });
@@ -8626,7 +8647,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
             final Connection localTestConn = testConn;
             assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
                 public Void call() throws Exception {
-                    localTestConn.createStatement().executeQuery("SELECT 1");
+                    ResultSet rset = localTestConn.createStatement().executeQuery("SELECT 1");
+                    rset.next();
                     return null;
                 }
             });
@@ -8664,7 +8686,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
             final Connection localTestConn = testConn;
             assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
                 public Void call() throws Exception {
-                    localTestConn.createStatement().executeQuery("SELECT 1");
+                    ResultSet rset = localTestConn.createStatement().executeQuery("SELECT 1");
+                    rset.next();
                     return null;
                 }
             });
@@ -8713,7 +8736,8 @@ public class ConnectionRegressionTest extends BaseTestCase {
             final Connection localTestConn = testConn;
             assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
                 public Void call() throws Exception {
-                    localTestConn.createStatement().executeQuery("SELECT 1");
+                    ResultSet rset = localTestConn.createStatement().executeQuery("SELECT 1");
+                    rset.next();
                     return null;
                 }
             });
@@ -8740,8 +8764,999 @@ public class ConnectionRegressionTest extends BaseTestCase {
     }
 
     private void testBug21286268AssertConnectedToAndReadOnly(Connection testConn, String expectedHost, boolean expectedReadOnly) throws SQLException {
-        testConn.createStatement().executeQuery("SELECT 1");
+        this.rs = testConn.createStatement().executeQuery("SELECT 1");
         assertEquals(expectedHost, ((MySQLConnection) testConn).getHost());
         assertEquals(expectedReadOnly, testConn.isReadOnly());
+    }
+
+    /**
+     * Tests fix for Bug#77171 - On every connect getting sql_mode from server creates unnecessary exception.
+     * 
+     * This fix is a refactoring on ConnectorImpl.initializePropsFromServer() to improve performance when processing the SQL_MODE value. No behavior was
+     * changed. This test guarantees that nothing was broken in these matters, for the relevant MySQL versions, after this fix.
+     */
+    public void testBug77171() throws Exception {
+        String sqlMode = getMysqlVariable("sql_mode");
+        sqlMode = removeSqlMode("ANSI_QUOTES", sqlMode);
+        sqlMode = removeSqlMode("NO_BACKSLASH_ESCAPES", sqlMode);
+        String newSqlMode = sqlMode;
+        if (sqlMode.length() > 0) {
+            sqlMode += ",";
+        }
+
+        Properties props = new Properties();
+        props.put("sessionVariables", "sql_mode='" + newSqlMode + "'");
+        Connection testConn = getConnectionWithProps(props);
+        assertFalse(((MySQLConnection) testConn).useAnsiQuotedIdentifiers());
+        assertFalse(((MySQLConnection) testConn).isNoBackslashEscapesSet());
+        testConn.close();
+
+        props.clear();
+        newSqlMode = sqlMode + "ANSI_QUOTES";
+        props.put("sessionVariables", "sql_mode='" + newSqlMode + "'");
+        testConn = getConnectionWithProps(props);
+        assertTrue(((MySQLConnection) testConn).useAnsiQuotedIdentifiers());
+        assertFalse(((MySQLConnection) testConn).isNoBackslashEscapesSet());
+        testConn.close();
+
+        props.clear();
+        newSqlMode = sqlMode + "NO_BACKSLASH_ESCAPES";
+        props.put("sessionVariables", "sql_mode='" + newSqlMode + "'");
+        testConn = getConnectionWithProps(props);
+        assertFalse(((MySQLConnection) testConn).useAnsiQuotedIdentifiers());
+        assertTrue(((MySQLConnection) testConn).isNoBackslashEscapesSet());
+        testConn.close();
+
+        props.clear();
+        newSqlMode = sqlMode + "ANSI_QUOTES,NO_BACKSLASH_ESCAPES";
+        props.put("sessionVariables", "sql_mode='" + newSqlMode + "'");
+        testConn = getConnectionWithProps(props);
+        assertTrue(((MySQLConnection) testConn).useAnsiQuotedIdentifiers());
+        assertTrue(((MySQLConnection) testConn).isNoBackslashEscapesSet());
+        testConn.close();
+    }
+
+    /**
+     * Tests fix for Bug#22730682 - ARRAYINDEXOUTOFBOUNDSEXCEPTION FROM CONNECTIONGROUPMANAGER.REMOVEHOST().
+     * 
+     * This bug was caused by an incorrect array handling when removing an host from a load balanced connection group, with the option to affect existing
+     * connections.
+     */
+    public void testBug22730682() throws Exception {
+        Properties connProps = getPropertiesFromTestsuiteUrl();
+        String host = connProps.getProperty(NonRegisteringDriver.HOST_PROPERTY_KEY, "localhost");
+        String port = connProps.getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY, "3306");
+
+        final String currentHost = host + ":" + port;
+        final String dummyHost = "bug22730682:12345";
+
+        final Properties props = new Properties();
+        Connection testConn;
+
+        final String lbConnGroup1 = "Bug22730682LB1";
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup1);
+        testConn = getLoadBalancedConnection(3, dummyHost, props);
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup1).contains(dummyHost));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup1).contains(currentHost));
+        ConnectionGroupManager.removeHost(lbConnGroup1, dummyHost);
+        assertEquals(1, ConnectionGroupManager.getActiveHostCount(lbConnGroup1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup1).contains(currentHost));
+        testConn.close();
+
+        final String lbConnGroup2 = "Bug22730682LB2";
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup2);
+        testConn = getLoadBalancedConnection(3, dummyHost, props);
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup2).contains(dummyHost));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup2).contains(currentHost));
+        ConnectionGroupManager.removeHost(lbConnGroup2, dummyHost, true);
+        assertEquals(1, ConnectionGroupManager.getActiveHostCount(lbConnGroup2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup2).contains(currentHost));
+        testConn.close();
+    }
+
+    /**
+     * Tests fix for Bug#22848249 - LOADBALANCECONNECTIONGROUPMANAGER.REMOVEHOST() NOT WORKING AS EXPECTED.
+     * 
+     * Tests a sequence of additions and removals of hosts from a load-balanced connection group.
+     */
+    public void testBug22848249() throws Exception {
+        /*
+         * Remove and add hosts to the connection group, other than the one from the active underlying connection.
+         * Changes affecting active l/b connections.
+         */
+        subTestBug22848249A();
+
+        /*
+         * Remove and add hosts to the connection group, including the host from the active underlying connection.
+         * Changes affecting active l/b connections.
+         */
+        subTestBug22848249B();
+
+        /*
+         * Remove hosts from the connection group with changes not affecting active l/b connections.
+         */
+        subTestBug22848249C();
+        /*
+         * Add hosts to the connection group with changes not affecting active l/b connections.
+         */
+        subTestBug22848249D();
+    }
+
+    /*
+     * Tests removing and adding hosts (excluding the host from the underlying physical connection) to the connection group with the option to propagate
+     * changes to all active load-balanced connections.
+     */
+    private void subTestBug22848249A() throws Exception {
+        final String defaultHost = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.HOST_PROPERTY_KEY);
+        final String defaultPort = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY);
+        final String host1 = "first";
+        final String host2 = "second";
+        final String host3 = "third";
+        final String host4 = "fourth";
+        final String hostPort1 = host1 + ":" + defaultPort;
+        final String hostPort2 = host2 + ":" + defaultPort;
+        final String hostPort3 = host3 + ":" + defaultPort;
+        final String hostPort4 = host4 + ":" + defaultPort;
+        final String lbConnGroup = "Bug22848249A";
+
+        System.out.println("testBug22848249A:");
+        System.out.println("********************************************************************************");
+
+        Properties props = new Properties();
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup);
+        Connection testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2, host3 }, props);
+        testConn.setAutoCommit(false);
+
+        String connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertEquals(3, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+
+        /*
+         * The l/b connection won't be able to use removed unused hosts.
+         */
+
+        // Remove a non-connected host: host2 or host3.
+        String removedHost = connectedHost.equals(host3) ? host2 : host3;
+        String removedHostPort = removedHost + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort, true);
+        assertEquals(connectedHost, ((com.mysql.jdbc.MySQLConnection) testConn).getHost()); // Still connected to the initital host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort.equals(hostPort2)); // Only one can be true.
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort.equals(hostPort3));
+
+        // Force some transaction boundaries while checking that the removed host is never used.
+        int connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(removedHost));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t1. Swapped connections " + connectionSwaps + " times out of 100, without hitting the removed host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertFalse(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(removedHost)));
+
+        /*
+         * The l/b connection will be able to use a host added back to the connection group.
+         */
+
+        // Add back the previously removed host.
+        ConnectionGroupManager.addHost(lbConnGroup, removedHostPort, true);
+        assertEquals(3, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+
+        // Force transaction boundaries until the new host is selected or a limit number of attempts is reached.
+        String newHost = removedHost;
+        connectionSwaps = 0;
+        int attemptsLeft = 100;
+        while (!(connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost()).equals(newHost)) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+            if (--attemptsLeft == 0) {
+                fail("Failed to swap to the newly added host after 100 transaction boundaries and " + connectionSwaps + " connection swaps.");
+            }
+        }
+        System.out.println("\t2. Swapped connections " + connectionSwaps + " times before hitting the new host.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertTrue(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(newHost)));
+
+        /*
+         * The l/b connection will be able to use new hosts added to the connection group.
+         */
+
+        // Add a completely new host.
+        UnreliableSocketFactory.mapHost(host4, defaultHost);
+        ConnectionGroupManager.addHost(lbConnGroup, hostPort4, true);
+        assertEquals(4, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4));
+
+        // Force transaction boundaries until the new host is selected or a limit number of attempts is reached.
+        newHost = host4;
+        connectionSwaps = 0;
+        attemptsLeft = 100;
+        while (!(connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost()).equals(newHost)) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+            if (--attemptsLeft == 0) {
+                fail("Failed to swap to the newly added host after 100 transaction boundaries and " + connectionSwaps + " connection swaps.");
+            }
+        }
+        System.out.println("\t3. Swapped connections " + connectionSwaps + " times before hitting the new host.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertTrue(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(newHost)));
+
+        /*
+         * The l/b connection won't be able to use any number of removed hosts (excluding the current active host).
+         */
+
+        // Remove any two hosts, other than the one used in the active connection.
+        String removedHost1 = connectedHost.equals(host2) ? host1 : host2;
+        String removedHostPort1 = removedHost1 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort1, true);
+        String removedHost2 = connectedHost.equals(host4) ? host3 : host4;
+        String removedHostPort2 = removedHost2 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort2, true);
+        assertEquals(connectedHost, ((com.mysql.jdbc.MySQLConnection) testConn).getHost()); // Still connected to the same host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1) ^ removedHostPort1.equals(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort1.equals(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort2.equals(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4) ^ removedHostPort2.equals(hostPort4));
+
+        // Force some transaction boundaries while checking that the removed hosts are never used.
+        connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(removedHost1));
+            assertFalse(newConnectedHost.equals(removedHost2));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t4. Swapped connections " + connectionSwaps + " times out of 100, without hitting the removed host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+    }
+
+    /*
+     * Tests removing and adding hosts (including the host from the underlying physical connection) to the connection group with the option to propagate
+     * changes to all active load-balanced connections.
+     */
+    private void subTestBug22848249B() throws Exception {
+        final String defaultHost = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.HOST_PROPERTY_KEY);
+        final String defaultPort = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY);
+        final String host1 = "first";
+        final String host2 = "second";
+        final String host3 = "third";
+        final String host4 = "fourth";
+        final String hostPort1 = host1 + ":" + defaultPort;
+        final String hostPort2 = host2 + ":" + defaultPort;
+        final String hostPort3 = host3 + ":" + defaultPort;
+        final String hostPort4 = host4 + ":" + defaultPort;
+        final String lbConnGroup = "Bug22848249B";
+
+        System.out.println("testBug22848249B:");
+        System.out.println("********************************************************************************");
+
+        Properties props = new Properties();
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup);
+        Connection testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2, host3 }, props);
+        testConn.setAutoCommit(false);
+
+        String connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertEquals(3, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+
+        /*
+         * The l/b connection won't be able to use removed hosts.
+         * Undelying connection is invalidated after removing the host currently being used.
+         */
+
+        // Remove the connected host.
+        String removedHost = connectedHost;
+        String removedHostPort = removedHost + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort, true);
+        assertFalse(((com.mysql.jdbc.MySQLConnection) testConn).getHost().equals(connectedHost)); // No longer connected to the removed host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1) ^ removedHostPort.equals(hostPort1)); // Only one can be true.
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort.equals(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort.equals(hostPort3));
+
+        // Force some transaction boundaries while checking that the removed host is never used again.
+        UnreliableSocketFactory.flushConnectionAttempts();
+        int connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(removedHost));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t1. Swapped connections " + connectionSwaps + " times out of 100, without hitting the removed host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertFalse(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(removedHost)));
+
+        /*
+         * The l/b connection will be able to use a host added back to the connection group.
+         */
+
+        // Add back the previously removed host.
+        ConnectionGroupManager.addHost(lbConnGroup, removedHostPort, true);
+        assertEquals(3, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+
+        // Force transaction boundaries until the new host is selected or a limit number of attempts is reached.
+        String newHost = removedHost;
+        connectionSwaps = 0;
+        int attemptsLeft = 100;
+        while (!(connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost()).equals(newHost)) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+            if (--attemptsLeft == 0) {
+                fail("Failed to swap to the newly added host after 100 transaction boundaries and " + connectionSwaps + " connection swaps.");
+            }
+        }
+        System.out.println("\t2. Swapped connections " + connectionSwaps + " times before hitting the new host.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertTrue(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(newHost)));
+
+        /*
+         * The l/b connection will be able to use new hosts added to the connection group.
+         */
+
+        // Add a completely new host.
+        UnreliableSocketFactory.mapHost(host4, defaultHost);
+        ConnectionGroupManager.addHost(lbConnGroup, hostPort4, true);
+        assertEquals(4, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4));
+
+        // Force transaction boundaries until the new host is selected or a limit number of attempts is reached.
+        newHost = host4;
+        connectionSwaps = 0;
+        attemptsLeft = 100;
+        while (!(connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost()).equals(newHost)) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+            if (--attemptsLeft == 0) {
+                fail("Failed to swap to the newly added host after 100 transaction boundaries and " + connectionSwaps + " connection swaps.");
+            }
+        }
+        System.out.println("\t3. Swapped connections " + connectionSwaps + " times before hitting the new host.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertTrue(UnreliableSocketFactory.getHostsFromAllConnections().contains(UnreliableSocketFactory.getHostConnectedStatus(newHost)));
+
+        /*
+         * The l/b connection won't be able to use any number of removed hosts (including the current active host).
+         * Undelying connection is invalidated after removing the host currently being used.
+         */
+
+        // Remove two hosts, one of them is from the active connection.
+        String removedHost1 = connectedHost.equals(host1) ? host1 : host2;
+        String removedHostPort1 = removedHost1 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort1, true);
+        String removedHost2 = connectedHost.equals(host3) ? host3 : host4;
+        String removedHostPort2 = removedHost2 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort2, true);
+        assertFalse(((com.mysql.jdbc.MySQLConnection) testConn).getHost().equals(removedHost1)); // Not connected to the first removed host.
+        assertFalse(((com.mysql.jdbc.MySQLConnection) testConn).getHost().equals(removedHost2)); // Not connected to the second removed host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1) ^ removedHostPort1.equals(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort1.equals(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort2.equals(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4) ^ removedHostPort2.equals(hostPort4));
+
+        // Force some transaction boundaries while checking that the removed hosts are never used.
+        connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(removedHost1));
+            assertFalse(newConnectedHost.equals(removedHost2));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t4. Swapped connections " + connectionSwaps + " times out of 100, without hitting the removed host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+    }
+
+    /*
+     * Tests removing hosts from the connection group without affecting current active connections.
+     */
+    private void subTestBug22848249C() throws Exception {
+        final String defaultPort = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY);
+        final String host1 = "first";
+        final String host2 = "second";
+        final String host3 = "third";
+        final String host4 = "fourth";
+        final String hostPort1 = host1 + ":" + defaultPort;
+        final String hostPort2 = host2 + ":" + defaultPort;
+        final String hostPort3 = host3 + ":" + defaultPort;
+        final String hostPort4 = host4 + ":" + defaultPort;
+        final String lbConnGroup = "Bug22848249C";
+
+        System.out.println("testBug22848249C:");
+        System.out.println("********************************************************************************");
+
+        /*
+         * Initial connection will be able to use all hosts, even after removed from the connection group.
+         */
+        Properties props = new Properties();
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup);
+        Connection testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2, host3, host4 }, props);
+        testConn.setAutoCommit(false);
+
+        String connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertEquals(4, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4));
+
+        // Remove two hosts, one of them is from the active connection.
+        String removedHost1 = connectedHost.equals(host1) ? host1 : host2;
+        String removedHostPort1 = removedHost1 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort1, false);
+        String removedHost2 = connectedHost.equals(host3) ? host3 : host4;
+        String removedHostPort2 = removedHost2 + ":" + defaultPort;
+        ConnectionGroupManager.removeHost(lbConnGroup, removedHostPort2, false);
+        assertEquals(connectedHost, ((com.mysql.jdbc.MySQLConnection) testConn).getHost()); // Still connected to the same host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1) ^ removedHostPort1.equals(hostPort1)); // Only one can be true.
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort1.equals(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort2.equals(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4) ^ removedHostPort2.equals(hostPort4));
+
+        // Force some transaction boundaries and check that all hosts are being used.
+        int connectionSwaps = 0;
+        Set<String> hostsUsed = new HashSet<String>();
+        for (int i = 0; i < 100 && hostsUsed.size() < 4; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                hostsUsed.add(newConnectedHost);
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t1. Swapped connections " + connectionSwaps + " times out of 100 or before using all hosts.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertEquals(4, hostsUsed.size());
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+
+        /*
+         * New connection wont be able to use the previously removed hosts.
+         */
+        testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2, host3, host4 }, props);
+        testConn.setAutoCommit(false);
+
+        connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertFalse(((com.mysql.jdbc.MySQLConnection) testConn).getHost().equals(removedHost1)); // Not connected to the removed host.
+        assertFalse(((com.mysql.jdbc.MySQLConnection) testConn).getHost().equals(removedHost2)); // Not connected to the removed host.
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1) ^ removedHostPort1.equals(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2) ^ removedHostPort1.equals(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3) ^ removedHostPort2.equals(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4) ^ removedHostPort2.equals(hostPort4));
+
+        // Force some transaction boundaries while checking that the removed hosts are never used.
+        connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(removedHost1));
+            assertFalse(newConnectedHost.equals(removedHost2));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t2. Swapped connections " + connectionSwaps + " times out of 100, without hitting the removed host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+    }
+
+    /*
+     * Tests adding hosts from the connection group without affecting current active connections.
+     */
+    private void subTestBug22848249D() throws Exception {
+        final String defaultHost = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.HOST_PROPERTY_KEY);
+        final String defaultPort = getPropertiesFromTestsuiteUrl().getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY);
+        final String host1 = "first";
+        final String host2 = "second";
+        final String host3 = "third";
+        final String host4 = "fourth";
+        final String hostPort1 = host1 + ":" + defaultPort;
+        final String hostPort2 = host2 + ":" + defaultPort;
+        final String hostPort3 = host3 + ":" + defaultPort;
+        final String hostPort4 = host4 + ":" + defaultPort;
+        final String lbConnGroup = "Bug22848249D";
+
+        System.out.println("testBug22848249D:");
+        System.out.println("********************************************************************************");
+
+        /*
+         * Initial connection will be able to use only the hosts available when it was initialized, even after adding new ones to the connection group.
+         */
+        Properties props = new Properties();
+        props.setProperty("loadBalanceConnectionGroup", lbConnGroup);
+        Connection testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2 }, props);
+        testConn.setAutoCommit(false);
+
+        String connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertEquals(2, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+
+        // Add two hosts.
+        UnreliableSocketFactory.mapHost(host3, defaultHost);
+        ConnectionGroupManager.addHost(lbConnGroup, hostPort3, false);
+        UnreliableSocketFactory.mapHost(host4, defaultHost);
+        ConnectionGroupManager.addHost(lbConnGroup, hostPort4, false);
+        assertEquals(4, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4));
+
+        // Force some transaction boundaries and check that the new hosts aren't used.
+        int connectionSwaps = 0;
+        for (int i = 0; i < 100; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            assertFalse(newConnectedHost.equals(host3));
+            assertFalse(newConnectedHost.equals(host4));
+            if (!connectedHost.equals(newConnectedHost)) {
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t1. Swapped connections " + connectionSwaps + " times out of 100, without hitting the newly added host(s).");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+
+        /*
+         * New connection will be able to use all hosts.
+         */
+        testConn = getUnreliableLoadBalancedConnection(new String[] { host1, host2, host3, host4 }, props);
+        testConn.setAutoCommit(false);
+
+        connectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+        assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(connectedHost));
+
+        assertEquals(4, ConnectionGroupManager.getActiveHostCount(lbConnGroup));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort1));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort2));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort3));
+        assertTrue(ConnectionGroupManager.getActiveHostLists(lbConnGroup).contains(hostPort4));
+
+        // Force some transaction boundaries while checking that the removed hosts are never used.
+        connectionSwaps = 0;
+        Set<String> hostsUsed = new HashSet<String>();
+        for (int i = 0; i < 100 && hostsUsed.size() < 4; i++) {
+            testConn.rollback();
+            String newConnectedHost = ((com.mysql.jdbc.MySQLConnection) testConn).getHost();
+            if (!connectedHost.equals(newConnectedHost)) {
+                hostsUsed.add(newConnectedHost);
+                connectedHost = newConnectedHost;
+                connectionSwaps++;
+            }
+        }
+        System.out.println("\t2. Swapped connections " + connectionSwaps + " times out of 100 or before using all hosts.");
+        assertTrue(connectionSwaps > 0); // Non-deterministic, but something must be wrong if there are no swaps after 100 transaction boundaries.
+        assertEquals(4, hostsUsed.size());
+
+        // Make sure the connection is working fine.
+        this.rs = testConn.createStatement().executeQuery("SELECT 'testBug22848249'");
+        assertTrue(this.rs.next());
+        assertEquals("testBug22848249", this.rs.getString(1));
+        testConn.close();
+    }
+
+    /**
+     * Tests fix for Bug#22678872 - NPE DURING UPDATE WITH FABRIC.
+     * 
+     * Although the bug was reported against a Fabric connection, it can't be systematically reproduced there. A deep analysis revealed that the bug occurs due
+     * to a defect in the dynamic hosts management of replication connections, specifically when one or both of the internal hosts lists (masters and/or slaves)
+     * becomes empty. As such, the bug is reproducible and tested resorting to replication connections and dynamic hosts management of replication connections
+     * only.
+     * This test reproduces the relevant steps involved in the original stack trace, originated in the FabricMySQLConnectionProxy.getActiveConnection() code:
+     * - The replication connections are initialized with the same properties as in a Fabric connection.
+     * - Hosts are removed using the same options as in a Fabric connection.
+     * - The method tested after any host change is Connection.setAutoCommit(), which is the method that triggered the original NPE.
+     */
+    public void testBug22678872() throws Exception {
+        final Properties connProps = getPropertiesFromTestsuiteUrl();
+        final String host = connProps.getProperty(NonRegisteringDriver.HOST_PROPERTY_KEY, "localhost");
+        final String port = connProps.getProperty(NonRegisteringDriver.PORT_PROPERTY_KEY, "3306");
+        final String hostPortPair = host + ":" + port;
+        final String database = connProps.getProperty(NonRegisteringDriver.DBNAME_PROPERTY_KEY);
+        final String username = connProps.getProperty(NonRegisteringDriver.USER_PROPERTY_KEY);
+        final String password = connProps.getProperty(NonRegisteringDriver.PASSWORD_PROPERTY_KEY, "");
+
+        final Properties props = new Properties();
+        props.setProperty(NonRegisteringDriver.USER_PROPERTY_KEY, username);
+        props.setProperty(NonRegisteringDriver.PASSWORD_PROPERTY_KEY, password);
+        props.setProperty(NonRegisteringDriver.DBNAME_PROPERTY_KEY, database);
+        props.setProperty("useSSL", "false");
+        props.setProperty("loadBalanceHostRemovalGracePeriod", "0"); // Speed up the test execution.
+        // Replicate the properties used in FabricMySQLConnectionProxy.getActiveConnection().
+        props.setProperty("retriesAllDown", "1");
+        props.setProperty("allowMasterDownConnections", "true");
+        props.setProperty("allowSlaveDownConnections", "true");
+        props.setProperty("readFromMasterWhenNoSlaves", "true");
+
+        String replConnGroup = "";
+        final List<String> emptyHostsList = Collections.emptyList();
+        final List<String> singleHostList = Collections.singletonList(hostPortPair);
+
+        /*
+         * Case A:
+         * - Initialize a replication connection with masters and slaves lists empty.
+         */
+        replConnGroup = "Bug22678872A";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        assertThrows(SQLException.class, "A replication connection cannot be initialized without master hosts and slave hosts, simultaneously\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        ReplicationConnectionProxy.createProxyInstance(emptyHostsList, props, emptyHostsList, props);
+                        return null;
+                    }
+                });
+
+        /*
+         * Case B:
+         * - Initialize a replication connection with one master and no slaves.
+         * - Then remove the master and add it back as a slave, followed by a promotion to master.
+         */
+        replConnGroup = "Bug22678872B";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnB = ReplicationConnectionProxy.createProxyInstance(singleHostList, props, emptyHostsList, props);
+        assertTrue(testConnB.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnB.isReadOnly());
+        testConnB.setAutoCommit(false); // This was the method that triggered the original NPE. 
+        ReplicationConnectionGroupManager.removeMasterHost(replConnGroup, hostPortPair, false);
+        assertThrows(SQLException.class, "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnB.setAutoCommit(false); // JDBC interface method throws SQLException.
+                        return null;
+                    }
+                });
+        assertThrows(IllegalStateException.class,
+                "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnB.isMasterConnection(); // Some Connector/J internal methods don't throw compatible exceptions. They have to be wrapped.
+                        return null;
+                    }
+                });
+
+        ReplicationConnectionGroupManager.addSlaveHost(replConnGroup, hostPortPair);
+        assertFalse(testConnB.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnB.isReadOnly());
+        testConnB.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.promoteSlaveToMaster(replConnGroup, hostPortPair);
+        assertTrue(testConnB.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnB.isReadOnly());
+        testConnB.setAutoCommit(false);
+        testConnB.close();
+
+        /*
+         * Case C:
+         * - Initialize a replication connection with no masters and one slave.
+         * - Then remove the slave and add it back, followed by a promotion to master.
+         */
+        replConnGroup = "Bug22678872C";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnC = ReplicationConnectionProxy.createProxyInstance(emptyHostsList, props, singleHostList, props);
+        assertFalse(testConnC.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnC.isReadOnly());
+        testConnC.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeSlaveHost(replConnGroup, hostPortPair, true);
+        assertThrows(SQLException.class, "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnC.setAutoCommit(false);
+                        return null;
+                    }
+                });
+
+        ReplicationConnectionGroupManager.addSlaveHost(replConnGroup, hostPortPair);
+        assertFalse(testConnC.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnC.isReadOnly());
+        testConnC.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.promoteSlaveToMaster(replConnGroup, hostPortPair);
+        assertTrue(testConnC.isMasterConnection()); // Connected to a master host ...
+        assertTrue(testConnC.isReadOnly()); // ... but the connection is read-only because it was initialized with no masters.
+        testConnC.setAutoCommit(false);
+        testConnC.close();
+
+        /*
+         * Case D:
+         * - Initialize a replication connection with one master and one slave.
+         * - Then remove the master host, followed by removing the slave host.
+         * - Finally add the slave host back and promote it to master.
+         */
+        replConnGroup = "Bug22678872D";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnD = ReplicationConnectionProxy.createProxyInstance(singleHostList, props, singleHostList, props);
+        assertTrue(testConnD.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnD.isReadOnly());
+        testConnD.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeMasterHost(replConnGroup, hostPortPair, false);
+        assertFalse(testConnD.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnD.isReadOnly());
+        testConnD.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeSlaveHost(replConnGroup, hostPortPair, true);
+        assertThrows(SQLException.class, "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnD.setAutoCommit(false);
+                        return null;
+                    }
+                });
+
+        ReplicationConnectionGroupManager.addSlaveHost(replConnGroup, hostPortPair);
+        assertFalse(testConnD.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnD.isReadOnly());
+        testConnD.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.promoteSlaveToMaster(replConnGroup, hostPortPair);
+        assertTrue(testConnD.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnD.isReadOnly());
+        testConnD.setAutoCommit(false);
+        testConnD.close();
+
+        /*
+         * Case E:
+         * - Initialize a replication connection with one master and one slave.
+         * - Set read-only.
+         * - Then remove the slave host, followed by removing the master host.
+         * - Finally add the slave host back and promote it to master.
+         */
+        replConnGroup = "Bug22678872E";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnE = ReplicationConnectionProxy.createProxyInstance(singleHostList, props, singleHostList, props);
+        assertTrue(testConnE.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnE.isReadOnly());
+        testConnE.setAutoCommit(false);
+
+        testConnE.setReadOnly(true);
+        assertFalse(testConnE.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnE.isReadOnly());
+        testConnE.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeSlaveHost(replConnGroup, hostPortPair, true);
+        assertTrue(testConnE.isMasterConnection());  // Connected to a master host...
+        assertTrue(testConnE.isReadOnly()); // ... but the connection is read-only because that's how it was previously set.
+        testConnE.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeMasterHost(replConnGroup, hostPortPair, false);
+        assertThrows(SQLException.class, "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnE.setAutoCommit(false);
+                        return null;
+                    }
+                });
+
+        ReplicationConnectionGroupManager.addSlaveHost(replConnGroup, hostPortPair);
+        assertFalse(testConnE.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnE.isReadOnly());
+        testConnE.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.promoteSlaveToMaster(replConnGroup, hostPortPair);
+        assertTrue(testConnE.isMasterConnection());  // Connected to a master host...
+        assertTrue(testConnE.isReadOnly()); // ... but the connection is read-only because that's how it was previously set.
+        testConnE.setAutoCommit(false);
+        testConnE.close();
+
+        /*
+         * Case F:
+         * - Initialize a replication connection with one master and one slave.
+         * - Then remove the slave host, followed by removing the master host.
+         * - Finally add the slave host back and promote it to master.
+         */
+        replConnGroup = "Bug22678872F";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnF = ReplicationConnectionProxy.createProxyInstance(singleHostList, props, singleHostList, props);
+        assertTrue(testConnF.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnF.isReadOnly());
+        testConnF.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeSlaveHost(replConnGroup, hostPortPair, true);
+        assertTrue(testConnF.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnF.isReadOnly());
+        testConnF.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeMasterHost(replConnGroup, hostPortPair, false);
+        assertThrows(SQLException.class, "The replication connection is an inconsistent state due to non existing hosts in both its internal hosts lists\\.",
+                new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnF.setAutoCommit(false);
+                        return null;
+                    }
+                });
+
+        ReplicationConnectionGroupManager.addSlaveHost(replConnGroup, hostPortPair);
+        assertFalse(testConnF.isMasterConnection());  // Connected to a slave host.
+        assertTrue(testConnF.isReadOnly());
+        testConnF.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.promoteSlaveToMaster(replConnGroup, hostPortPair);
+        assertTrue(testConnF.isMasterConnection());  // Connected to a master host.
+        assertFalse(testConnF.isReadOnly());
+        testConnF.setAutoCommit(false);
+        testConnF.close();
+
+        /*
+         * Case G:
+         * This covers one corner case where the attribute ReplicationConnectionProxy.currentConnection can still be null even when there are known hosts. It
+         * results from a combination of empty hosts lists with downed hosts:
+         * - Start with one host in each list.
+         * - Switch to the slaves connection (set read-only).
+         * - Remove the master host.
+         * - Make the slave only unavailable.
+         * - Promote the slave host to master.
+         * - (At this point the active connection is "null")
+         * - Finally bring up the host again and check the connection status.
+         */
+        // Use the UnreliableSocketFactory to control when the host must be downed.
+        final String newHost = "bug22678872";
+        final String newHostPortPair = newHost + ":" + port;
+        final String hostConnected = UnreliableSocketFactory.getHostConnectedStatus(newHost);
+        final String hostNotConnected = UnreliableSocketFactory.getHostFailedStatus(newHost);
+        final List<String> newSingleHostList = Collections.singletonList(newHostPortPair);
+        UnreliableSocketFactory.flushAllStaticData();
+        UnreliableSocketFactory.mapHost(newHost, host);
+        props.setProperty("socketFactory", "testsuite.UnreliableSocketFactory");
+
+        replConnGroup = "Bug22678872G";
+        props.setProperty("replicationConnectionGroup", replConnGroup);
+        final ReplicationConnection testConnG = ReplicationConnectionProxy.createProxyInstance(newSingleHostList, props, newSingleHostList, props);
+        assertTrue(testConnG.isMasterConnection()); // Connected to a master host.
+        assertFalse(testConnG.isReadOnly());
+        testConnG.setAutoCommit(false);
+
+        testBug22678872CheckConnectionsHistory(hostConnected, hostConnected); // Two successful connections.
+
+        testConnG.setReadOnly(true);
+        assertFalse(testConnG.isMasterConnection()); // Connected to a slave host.
+        assertTrue(testConnG.isReadOnly());
+        testConnG.setAutoCommit(false);
+
+        ReplicationConnectionGroupManager.removeMasterHost(replConnGroup, newHostPortPair, false);
+        assertFalse(testConnG.isMasterConnection()); // Connected to a slave host.
+        assertTrue(testConnG.isReadOnly());
+        testConnG.setAutoCommit(false);
+
+        UnreliableSocketFactory.downHost(newHost); // The host (currently a slave) goes down before being promoted to master.
+        assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
+            public Void call() throws Exception {
+                testConnG.promoteSlaveToMaster(newHostPortPair);
+                return null;
+            }
+        });
+
+        testBug22678872CheckConnectionsHistory(hostNotConnected); // One failed connection attempt.
+
+        assertFalse(testConnG.isMasterConnection()); // Actually not connected, but the promotion to master succeeded. 
+        assertThrows(SQLException.class, "The connection is unusable at the current state\\. There may be no hosts to connect to or all hosts this "
+                + "connection knows may be down at the moment\\.", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        testConnG.setAutoCommit(false);
+                        return null;
+                    }
+                });
+
+        testBug22678872CheckConnectionsHistory(hostNotConnected); // Another failed connection attempt.
+
+        assertThrows(SQLException.class, "(?s)Communications link failure.*", new Callable<Void>() {
+            public Void call() throws Exception {
+                testConnG.setReadOnly(false); // Triggers a reconnection that fails. The read-only state change is canceled by the exception.
+                return null;
+            }
+        }); // This throws a comm failure because it tried to connect to the existing server and failed. The internal read-only state didn't change.
+
+        testBug22678872CheckConnectionsHistory(hostNotConnected); // Another failed connection attempt.
+
+        UnreliableSocketFactory.dontDownHost(newHost); // The host (currently a master) is up again.
+        testConnG.setAutoCommit(false); // Triggers a reconnection that succeeds.
+
+        testBug22678872CheckConnectionsHistory(hostConnected); // One successful connection.
+
+        assertTrue(testConnG.isMasterConnection()); // Connected to a master host...
+        assertTrue(testConnG.isReadOnly()); // ... but the connection is read-only because that's how it was previously set.
+        testConnG.setAutoCommit(false);
+
+        testConnG.close();
+    }
+
+    private void testBug22678872CheckConnectionsHistory(String... expectedConnectionsHistory) {
+        assertConnectionsHistory(expectedConnectionsHistory);
+        assertEquals(UnreliableSocketFactory.getHostsFromAllConnections().size(), expectedConnectionsHistory.length);
+        UnreliableSocketFactory.flushConnectionAttempts();
     }
 }

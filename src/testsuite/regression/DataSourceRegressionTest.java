@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2002, 2014, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 
   The MySQL Connector/J is licensed under the terms of the GPLv2
   <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
@@ -52,9 +52,6 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
-import testsuite.BaseTestCase;
-import testsuite.simple.DataSourceTest;
-
 import com.mysql.jdbc.ConnectionProperties;
 import com.mysql.jdbc.MySQLConnection;
 import com.mysql.jdbc.NonRegisteringDriver;
@@ -64,6 +61,9 @@ import com.mysql.jdbc.jdbc2.optional.MysqlDataSource;
 import com.mysql.jdbc.jdbc2.optional.MysqlDataSourceFactory;
 import com.mysql.jdbc.jdbc2.optional.MysqlXADataSource;
 import com.mysql.jdbc.jdbc2.optional.MysqlXid;
+
+import testsuite.BaseTestCase;
+import testsuite.simple.DataSourceTest;
 
 /**
  * Tests fixes for bugs related to datasources.
@@ -268,10 +268,14 @@ public class DataSourceRegressionTest extends BaseTestCase {
 
                     assertTrue("Connection can not be obtained from data source", dsCon != null);
                 } finally {
-                    dsStmt.executeUpdate("DROP TABLE IF EXISTS testBug3920");
+                    if (dsStmt != null) {
+                        dsStmt.executeUpdate("DROP TABLE IF EXISTS testBug3920");
 
-                    dsStmt.close();
-                    dsCon.close();
+                        dsStmt.close();
+                    }
+                    if (dsCon != null) {
+                        dsCon.close();
+                    }
                 }
             } finally {
                 if (boundDs != null) {
@@ -325,6 +329,8 @@ public class DataSourceRegressionTest extends BaseTestCase {
             try {
                 Class.forName("org.jboss.resource.adapter.jdbc.ValidConnectionChecker");
             } catch (Exception ex) {
+                System.out.println("The testBug20242() is ignored because required class isn't available:");
+                ex.printStackTrace();
                 return; // class not available for testing
             }
 
@@ -398,7 +404,7 @@ public class DataSourceRegressionTest extends BaseTestCase {
         this.rs = physStatement.executeQuery("SELECT 1");
 
         try {
-            physConn.createStatement().executeQuery("SELECT 2");
+            this.rs = physConn.createStatement().executeQuery("SELECT 2");
             fail("Should have caught a streaming exception here");
         } catch (SQLException sqlEx) {
             assertTrue(sqlEx.getMessage() != null && sqlEx.getMessage().indexOf("Streaming") != -1);
@@ -417,7 +423,7 @@ public class DataSourceRegressionTest extends BaseTestCase {
         this.rs = physPrepStmt.executeQuery();
 
         try {
-            physConn.createStatement().executeQuery("SELECT 2");
+            this.rs = physConn.createStatement().executeQuery("SELECT 2");
             fail("Should have caught a streaming exception here");
         } catch (SQLException sqlEx) {
             assertTrue(sqlEx.getMessage() != null && sqlEx.getMessage().indexOf("Streaming") != -1);
@@ -480,8 +486,8 @@ public class DataSourceRegressionTest extends BaseTestCase {
         assertNotNull(pc.getConnection().prepareStatement("SELECT 1", new int[0]));
         assertNotNull(pc.getConnection().prepareStatement("SELECT 1", new String[0]));
         assertNotNull(pc.getConnection().prepareStatement("SELECT 1", ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY));
-        assertNotNull(pc.getConnection().prepareStatement("SELECT 1", ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY,
-                ResultSet.HOLD_CURSORS_OVER_COMMIT));
+        assertNotNull(
+                pc.getConnection().prepareStatement("SELECT 1", ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.HOLD_CURSORS_OVER_COMMIT));
     }
 
     public void testBug35810() throws Exception {
@@ -540,8 +546,30 @@ public class DataSourceRegressionTest extends BaseTestCase {
             xaRes.end(xid, XAResource.TMSUCCESS);
             assertEquals(XAResource.XA_OK, xaRes.prepare(xid));
 
-            // Simulate a connection hang
+            // Simulate a connection hang and make sure the connection really dies.
             this.stmt.execute("KILL CONNECTION " + connId);
+            int connAliveChecks = 4;
+            while (connAliveChecks > 0) {
+                this.rs = this.stmt.executeQuery("SHOW PROCESSLIST");
+                boolean connIsAlive = false;
+                while (!connIsAlive && this.rs.next()) {
+                    connIsAlive = this.rs.getInt(1) == connId;
+                }
+                this.rs.close();
+                if (connIsAlive) {
+                    connAliveChecks--;
+                    System.out.println("Connection id " + connId + " is still alive. Checking " + connAliveChecks + " more times.");
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                    }
+                } else {
+                    connAliveChecks = -1;
+                }
+            }
+            if (connAliveChecks == 0) {
+                fail("Failed to kill the Connection id " + connId + " in a timely manner.");
+            }
 
             XAException xaEx = assertThrows(XAException.class, "Undetermined error occurred in the underlying Connection - check your data for consistency",
                     new Callable<Void>() {
