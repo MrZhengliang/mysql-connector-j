@@ -2,6 +2,9 @@ THIS IS FORK. OFFICIAL REPOSITORY IS HERE : https://github.com/mysql/mysql-conne
 
 ---------
 
+NOTE: JIA NOW SUPPORT MYSQL 5.7!!! THIS FIX IS NOW OBSOLETE!!!
+
+
 This fork provides hardfix. It was made to replace deprecated "storage_engine" variable to "default_storage_engine", so apps can work with MySQL 5.7 instead of throwing exception.
 
 My recent snapshot is /mysql-connector-java-5.1.38-SNAPSHOT-bin.jar
